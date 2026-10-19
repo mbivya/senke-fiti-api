@@ -37,7 +37,6 @@ export async function searchListings(pool, params) {
     paramCount++;
   }
 
-  // Order by
   let orderBy = 'l.is_featured DESC, l.created_at DESC';
   if (params.sort === 'price_asc') orderBy = 'l.is_featured DESC, l.price_kes ASC';
   else if (params.sort === 'price_desc') orderBy = 'l.is_featured DESC, l.price_kes DESC';
@@ -46,4 +45,41 @@ export async function searchListings(pool, params) {
 
   const result = await pool.query(query, values);
   return result.rows;
+}
+
+export async function getUserListings(pool, userId) {
+  const query = `
+    SELECT l.id, l.make, l.model, l.year, l.price_kes, l.status, l.is_paid,
+           l.is_featured, l.expires_at, l.created_at, l.location_town,
+           (SELECT r2_key FROM listing_images WHERE listing_id = l.id ORDER BY sort_order ASC LIMIT 1) AS cover_key
+    FROM listings l
+    WHERE l.user_id = $1 AND l.status != 'hidden'
+    ORDER BY l.created_at DESC
+  `;
+  const result = await pool.query(query, [userId]);
+  return result.rows;
+}
+
+export async function getListing(pool, listingId) {
+  const listingRes = await pool.query(`
+    SELECT l.*, u.full_name AS seller_name, u.phone AS seller_phone, u.is_verified AS seller_verified
+    FROM listings l
+    JOIN users u ON u.id = l.user_id
+    WHERE l.id = $1
+  `, [listingId]);
+
+  if (listingRes.rows.length === 0) return null;
+  const listing = listingRes.rows[0];
+
+  const imagesRes = await pool.query(
+    'SELECT id, r2_key, sort_order FROM listing_images WHERE listing_id = $1 ORDER BY sort_order ASC',
+    [listingId]
+  );
+
+  const docsRes = await pool.query(
+    'SELECT id, r2_key, doc_type FROM listing_documents WHERE listing_id = $1 ORDER BY created_at ASC',
+    [listingId]
+  );
+
+  return { ...listing, images: imagesRes.rows, documents: docsRes.rows };
 }
