@@ -148,6 +148,9 @@ app.post('/api/payments/initiate', async (req, res) => {
 
     res.json({ ok: true, message: 'STK push sent!', result });
   } catch (err) {
+    console.error("=== KOPOKOPO ERROR ===");
+    console.error(err.message);
+    console.error("======================");
     res.status(400).json({ error: err.message });
   }
 });
