@@ -5,8 +5,7 @@ import pkg from 'pg';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
-import fetch from 'node-fetch';
-import { createClient } from '@supabase/supabase-js';
+import https from 'https'; // Using raw HTTPS instead of fetch
 
 import { hashPassword, verifyPassword, generateId, normalizePhone, getCookie, buildSessionCookie, buildLogoutCookie } from './src/auth.js';
 import { searchListings, getUserListings, getListing } from './src/listings.js';
@@ -31,12 +30,6 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-const supabase = createClient(
-  process.env.SUPABASE_URL, 
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { global: { fetch: fetch } }
-);
-
 const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(express.json());
@@ -44,7 +37,44 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// --- HELPER: Raw HTTPS Upload to Supabase ---
+function uploadToSupabase(filePath, fileBuffer, mimetype) {
+  return new Promise((resolve, reject) => {
+    // We parse the URL from .env so it matches your project exactly
+    const url = new URL(process.env.SUPABASE_URL);
+    
+    const options = {
+      hostname: url.hostname,
+      path: `/storage/v1/object/senke-fiti/${filePath}`,
+      method: 'POST',
+      family: 4, // Force IPv4
+      headers: {
+        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        'Content-Type': mimetype,
+        'Content-Length': fileBuffer.length
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(data);
+        } else {
+          reject(new Error(`Supabase upload failed (${res.statusCode}): ${data}`));
+        }
+      });
+    });
+
+    req.on('error', (err) => reject(err));
+    req.write(fileBuffer);
+    req.end();
+  });
+}
+
 // --- AUTHENTICATION ROUTES ---
+
 app.post('/api/signup', async (req, res) => {
   const { phone, password, full_name } = req.body;
   if (!phone || !password || !full_name) return res.status(400).json({ error: 'All fields required.' });
@@ -127,6 +157,7 @@ app.post('/api/logout', async (req, res) => {
 });
 
 // --- LISTING ROUTES ---
+
 app.get('/api/listings', async (req, res) => {
   try {
     const listings = await searchListings(pool, req.query);
@@ -154,7 +185,6 @@ app.get('/api/listings/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// DELETE LISTING ROUTE
 app.post('/api/listings/:id/delete', async (req, res) => {
   const token = getCookie(req.headers.cookie, 'session');
   if (!token) return res.status(401).json({ error: 'Not logged in' });
@@ -170,7 +200,6 @@ app.post('/api/listings/:id/delete', async (req, res) => {
     if (listingRes.rows.length === 0) return res.status(404).json({ error: 'Listing not found.' });
     if (listingRes.rows[0].user_id !== userId) return res.status(403).json({ error: 'Not your listing.' });
 
-    // This will cascade and delete listing_images and listing_documents if the foreign keys are set up correctly
     await pool.query('DELETE FROM listings WHERE id = $1', [listingId]);
 
     res.json({ ok: true });
@@ -201,26 +230,26 @@ app.post('/api/listings', upload.fields([{ name: 'photos', maxCount: 10 }, { nam
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'draft')
     `, [listingId, userId, make, model, year || null, engine_cc || null, mileage_km || null, price_kes, condition, intended_use || null, location_town, location_county || null, description || null, logbook_status || null]);
 
+    // Upload Photos via raw HTTPS
     if (req.files && req.files.photos) {
       for (let i = 0; i < req.files.photos.length; i++) {
         const file = req.files.photos[i];
         const fileExt = file.originalname.split('.').pop();
         const fileName = `listings/${listingId}/photos/${generateId()}.${fileExt}`;
         
-        const { error } = await supabase.storage.from('senke-fiti').upload(fileName, file.buffer, { contentType: file.mimetype });
-        if (error) throw new Error('Photo upload failed: ' + error.message);
+        await uploadToSupabase(fileName, file.buffer, file.mimetype);
         
         await pool.query(`INSERT INTO listing_images (id, listing_id, r2_key, sort_order) VALUES ($1, $2, $3, $4)`, [generateId('img'), listingId, fileName, i]);
       }
     }
 
+    // Upload Documents via raw HTTPS
     if (req.files && req.files.documents) {
       for (const file of req.files.documents) {
         const fileExt = file.originalname.split('.').pop();
         const fileName = `listings/${listingId}/documents/${generateId()}.${fileExt}`;
         
-        const { error } = await supabase.storage.from('senke-fiti').upload(fileName, file.buffer, { contentType: file.mimetype });
-        if (error) throw new Error('Document upload failed: ' + error.message);
+        await uploadToSupabase(fileName, file.buffer, file.mimetype);
         
         await pool.query(`INSERT INTO listing_documents (id, listing_id, r2_key, doc_type) VALUES ($1, $2, $3, $4)`, [generateId('doc'), listingId, fileName, 'logbook']);
       }
