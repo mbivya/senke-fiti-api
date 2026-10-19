@@ -1,5 +1,13 @@
 // src/listings.js
 
+// Helper to generate the public URL for Supabase Storage
+const getPublicUrl = (key) => {
+  if (!key) return null;
+  // If the key is already a full URL (e.g. from an old upload), just return it
+  if (key.startsWith('http')) return key;
+  return `${process.env.SUPABASE_URL}/storage/v1/object/public/senke-fiti/${key}`;
+};
+
 export async function searchListings(pool, params) {
   let query = `
     SELECT l.id, l.make, l.model, l.year, l.engine_cc, l.price_kes,
@@ -44,7 +52,12 @@ export async function searchListings(pool, params) {
   query += ` ORDER BY ${orderBy} LIMIT 100`;
 
   const result = await pool.query(query, values);
-  return result.rows;
+  
+  // Convert the database key to a full public URL
+  return result.rows.map(row => ({
+    ...row,
+    cover_key: getPublicUrl(row.cover_key)
+  }));
 }
 
 export async function getUserListings(pool, userId) {
@@ -57,7 +70,11 @@ export async function getUserListings(pool, userId) {
     ORDER BY l.created_at DESC
   `;
   const result = await pool.query(query, [userId]);
-  return result.rows;
+  
+  return result.rows.map(row => ({
+    ...row,
+    cover_key: getPublicUrl(row.cover_key)
+  }));
 }
 
 export async function getListing(pool, listingId) {
@@ -81,5 +98,11 @@ export async function getListing(pool, listingId) {
     [listingId]
   );
 
-  return { ...listing, images: imagesRes.rows, documents: docsRes.rows };
+  // Convert image keys to full URLs for the detail page
+  const images = imagesRes.rows.map(img => ({
+    ...img,
+    r2_key: getPublicUrl(img.r2_key)
+  }));
+
+  return { ...listing, images, documents: docsRes.rows };
 }

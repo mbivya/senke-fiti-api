@@ -1,8 +1,4 @@
 // server.js
-import dns from 'dns';
-// Force Node.js to use Google DNS to bypass local ISP/Windows IPv6 blocks
-dns.setServers(['8.8.8.8', '8.8.4.4']);
-
 import express from 'express';
 import dotenv from 'dotenv';
 import pkg from 'pg';
@@ -35,7 +31,6 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Pass node-fetch to Supabase to bypass Windows IPv6 DNS issues
 const supabase = createClient(
   process.env.SUPABASE_URL, 
   process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -159,6 +154,31 @@ app.get('/api/listings/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// DELETE LISTING ROUTE
+app.post('/api/listings/:id/delete', async (req, res) => {
+  const token = getCookie(req.headers.cookie, 'session');
+  if (!token) return res.status(401).json({ error: 'Not logged in' });
+
+  try {
+    const userRes = await pool.query('SELECT user_id FROM sessions WHERE token = $1', [token]);
+    if (userRes.rows.length === 0) return res.status(401).json({ error: 'Invalid session' });
+    const userId = userRes.rows[0].user_id;
+
+    const listingId = req.params.id;
+
+    const listingRes = await pool.query('SELECT user_id FROM listings WHERE id = $1', [listingId]);
+    if (listingRes.rows.length === 0) return res.status(404).json({ error: 'Listing not found.' });
+    if (listingRes.rows[0].user_id !== userId) return res.status(403).json({ error: 'Not your listing.' });
+
+    // This will cascade and delete listing_images and listing_documents if the foreign keys are set up correctly
+    await pool.query('DELETE FROM listings WHERE id = $1', [listingId]);
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/listings', upload.fields([{ name: 'photos', maxCount: 10 }, { name: 'documents', maxCount: 5 }]), async (req, res) => {
   const token = getCookie(req.headers.cookie, 'session');
   if (!token) return res.status(401).json({ error: 'Not logged in' });
@@ -181,31 +201,6 @@ app.post('/api/listings', upload.fields([{ name: 'photos', maxCount: 10 }, { nam
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'draft')
     `, [listingId, userId, make, model, year || null, engine_cc || null, mileage_km || null, price_kes, condition, intended_use || null, location_town, location_county || null, description || null, logbook_status || null]);
 
-    // Helper function to upload via raw HTTPS using the main Supabase domain
-    const uploadToSupabaseSafe = (filePath, fileBuffer, mimetype) => {
-      return new Promise((resolve, reject) => {
-        const options = {
-          hostname: 'supabase.co', // Use main domain, not the specific project domain
-          path: `/storage/v1/object/senke-fiti/${filePath}`,
-          method: 'POST',
-          family: 4,
-          headers: {
-            'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-            'Content-Type': mimetype,
-            'Content-Length': fileBuffer.length,
-            'x-supabase-project-ref': 'dbicomfssztygisqusar' // Tell Supabase which project to upload to
-          }
-        };
-        
-        // Actually, to be perfectly safe, we will use the Supabase JS client 
-        // but point it to a working proxy URL if needed. 
-        // For now, let's just use the standard client but catch the error nicely.
-        resolve(); // Placeholder
-      });
-    };
-
-    // Because Windows DNS is totally blocking the direct DB subdomain, 
-    // the safest path locally is to use the standard Supabase client.
     if (req.files && req.files.photos) {
       for (let i = 0; i < req.files.photos.length; i++) {
         const file = req.files.photos[i];

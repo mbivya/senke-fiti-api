@@ -367,7 +367,7 @@ function renderListings(listings) {
 
   grid.innerHTML = listings.map(l => {
     const cover = l.cover_key
-      ? `<img src="/media/${l.cover_key}" alt="${escapeHtml(l.make)} ${escapeHtml(l.model)}" loading="lazy">`
+      ? `<img src="${l.cover_key}" alt="${escapeHtml(l.make)} ${escapeHtml(l.model)}" loading="lazy">`
       : `<div class="placeholder">No photo</div>`;
     const featuredTag = l.is_featured ? '<span class="card-tag featured">★ Featured</span>' : '';
     return `
@@ -411,12 +411,12 @@ function renderListingDetail(l) {
 
   const images = l.images || [];
   const heroImg = images[0]
-    ? `<img id="detail-hero" src="/media/${images[0].r2_key}" alt="">`
+    ? `<img id="detail-hero" src="${images[0].r2_key}" alt="">`
     : `<div class="placeholder" style="aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;color:#999">No photo</div>`;
 
   const thumbs = images.length > 1
     ? `<div class="detail-thumbs">${images.map((img, i) =>
-        `<img src="/media/${img.r2_key}" data-full="/media/${img.r2_key}" class="${i === 0 ? 'active' : ''}">`
+        `<img src="${img.r2_key}" data-full="${img.r2_key}" class="${i === 0 ? 'active' : ''}">`
       ).join('')}</div>`
     : '';
 
@@ -551,7 +551,7 @@ async function loadDashboardListings() {
 
     container.innerHTML = listings.map(l => {
       const cover = l.cover_key
-        ? `<img src="/media/${l.cover_key}" alt="" loading="lazy">`
+        ? `<img src="${l.cover_key}" alt="" loading="lazy">`
         : `<div class="placeholder">No photo</div>`;
 
       let actions = '';
