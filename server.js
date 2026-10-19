@@ -9,7 +9,7 @@ import multer from 'multer';
 
 // Import your logic files
 import { hashPassword, verifyPassword, generateId, normalizePhone, getCookie, buildSessionCookie, buildLogoutCookie } from './src/auth.js';
-import { createListing, getListing, searchListings, getUserListings } from './src/listings.js';
+import { searchListings } from './src/listings.js';
 import { initiateStkPush, verifyWebhookSignature } from './src/payments.js';
 
 dotenv.config();
