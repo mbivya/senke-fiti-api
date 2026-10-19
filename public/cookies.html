@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cookie policy — Senke Fiti</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a href="/" class="brand"><img src="/assets/logo.svg" alt="Senke Fiti" height="46"></a>
+
+    <form class="header-search" id="header-search" action="/" method="GET">
+      <input type="text" name="q" id="header-search-input" placeholder="Search make or model...">
+    </form>
+
+    <nav id="nav">
+      <a href="/dashboard.html" class="nav-link hidden" id="nav-dashboard">My Listings</a>
+      <a href="/admin.html" class="nav-link hidden" id="nav-admin">Admin</a>
+      <a href="/upload.html" class="nav-cta">+ Post a bike</a>
+      <a href="/login.html" class="nav-link" id="nav-login">Log In</a>
+      <a href="/login.html" class="nav-link" id="nav-signup">Sign Up</a>
+      <span id="nav-user" class="hidden">
+        <span id="nav-name"></span>
+        <button id="logout-btn" class="btn-link">Log out</button>
+      </span>
+    </nav>
+
+    <button class="hamburger" id="hamburger" aria-label="Menu">☰</button>
+
+    <div class="mobile-menu" id="mobile-menu">
+      <span id="m-user-info" class="hidden" style="padding:8px;color:#888;font-size:13px"><span id="m-name"></span></span>
+      <a href="/" class="mobile-link">Browse bikes</a>
+      <a href="/dashboard.html" class="mobile-link hidden" id="m-dashboard">My Listings</a>
+      <a href="/admin.html" class="mobile-link hidden" id="m-admin">Admin</a>
+      <a href="/upload.html" class="mobile-link">+ Post a bike</a>
+      <div class="divider"></div>
+      <a href="/login.html" class="mobile-link" id="m-login">Log In</a>
+      <a href="/login.html" class="mobile-link" id="m-signup">Sign Up</a>
+      <button class="mobile-link hidden" id="m-logout">Log out</button>
+    </div>
+  </header>
+
+  <main class="static-page">
+    <h1>Cookie policy</h1>
+    <p class="hint">Last updated: 2026</p>
+
+    <h2>What are cookies</h2>
+    <p>Cookies are small text files stored on your device when you visit a website. They allow a site to remember you between pages and visits.</p>
+
+    <h2>Cookies we use</h2>
+    <table class="static-table">
+      <thead>
+        <tr><th>Name</th><th>Purpose</th><th>Duration</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>session</td>
+          <td>Keeps you logged in. HttpOnly (not readable by JavaScript).</td>
+          <td>Up to 10 years or until logout</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>What we don't use</h2>
+    <p>We don't currently use advertising cookies, third-party tracking pixels, or analytics cookies. If that changes, we'll update this policy and ask for consent where required.</p>
+
+    <h2>Managing cookies</h2>
+    <p>You can delete or block cookies in your browser settings. If you block the "session" cookie, you won't be able to log in to Senke Fiti.</p>
+
+    <h2>Contact</h2>
+    <p>Questions? <a href="/contact.html">Contact us</a>.</p>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-col footer-brand">
+        <img src="/assets/logo.svg" alt="Senke Fiti" height="40">
+        <p class="footer-tag">Kenya's motorcycle-only marketplace.</p>
+        <div class="footer-social">
+          <a href="#" aria-label="Facebook">Facebook</a>
+          <a href="#" aria-label="Instagram">Instagram</a>
+          <a href="#" aria-label="TikTok">TikTok</a>
+          <a href="#" aria-label="WhatsApp">WhatsApp</a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h4>Marketplace</h4>
+        <a href="/">Browse bikes</a>
+        <a href="/upload.html">Post a bike</a>
+        <a href="/pricing.html">Pricing</a>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <a href="/faq.html">FAQ</a>
+        <a href="/safety.html">Safety tips</a>
+        <a href="/contact.html">Contact us</a>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <a href="/about.html">About</a>
+        <a href="/terms.html">Terms & conditions</a>
+        <a href="/privacy.html">Privacy policy</a>
+        <a href="/cookies.html">Cookie policy</a>
+      </div>
+    </div>
+    <p class="footer-copy">© <span id="year"></span> Senke Fiti. All rights reserved.</p>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Safety tips — Senke Fiti</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a href="/" class="brand"><img src="/assets/logo.svg" alt="Senke Fiti" height="46"></a>
+
+    <form class="header-search" id="header-search" action="/" method="GET">
+      <input type="text" name="q" id="header-search-input" placeholder="Search make or model...">
+    </form>
+
+    <nav id="nav">
+      <a href="/dashboard.html" class="nav-link hidden" id="nav-dashboard">My Listings</a>
+      <a href="/admin.html" class="nav-link hidden" id="nav-admin">Admin</a>
+      <a href="/upload.html" class="nav-cta">+ Post a bike</a>
+      <a href="/login.html" class="nav-link" id="nav-login">Log In</a>
+      <a href="/login.html" class="nav-link" id="nav-signup">Sign Up</a>
+      <span id="nav-user" class="hidden">
+        <span id="nav-name"></span>
+        <button id="logout-btn" class="btn-link">Log out</button>
+      </span>
+    </nav>
+
+    <button class="hamburger" id="hamburger" aria-label="Menu">☰</button>
+
+    <div class="mobile-menu" id="mobile-menu">
+      <span id="m-user-info" class="hidden" style="padding:8px;color:#888;font-size:13px"><span id="m-name"></span></span>
+      <a href="/" class="mobile-link">Browse bikes</a>
+      <a href="/dashboard.html" class="mobile-link hidden" id="m-dashboard">My Listings</a>
+      <a href="/admin.html" class="mobile-link hidden" id="m-admin">Admin</a>
+      <a href="/upload.html" class="mobile-link">+ Post a bike</a>
+      <div class="divider"></div>
+      <a href="/login.html" class="mobile-link" id="m-login">Log In</a>
+      <a href="/login.html" class="mobile-link" id="m-signup">Sign Up</a>
+      <button class="mobile-link hidden" id="m-logout">Log out</button>
+    </div>
+  </header>
+
+  <main class="static-page">
+    <h1>Safety tips</h1>
+    <p class="lead">Buying or selling a motorcycle in Kenya involves real money and real risk. Follow these rules and you'll avoid 99% of problems.</p>
+
+    <h2>Before you buy</h2>
+    <ul>
+      <li><strong>Always view the motorcycle in person.</strong> Never send money before seeing it.</li>
+      <li><strong>Verify the logbook.</strong> Ask the seller to show the original logbook. Cross-check the engine number, chassis number, and plate against what's printed on it.</li>
+      <li><strong>Confirm ownership.</strong> Use NTSA's online e-Citizen portal to confirm the logbook is real and that the seller is the registered owner.</li>
+      <li><strong>Check for outstanding loans.</strong> A motorcycle can be financed. If the loan isn't cleared, the logbook may still be held by the lender.</li>
+      <li><strong>Meet in a public place.</strong> During daylight. Police station forecourts are actually a good spot — many are used for exactly this.</li>
+      <li><strong>Bring someone with you.</strong> Ideally someone who knows motorcycles.</li>
+      <li><strong>Test ride in a safe area.</strong> Not on a public road until you're sure.</li>
+      <li><strong>Insist on a written receipt.</strong> Include the sale price, date, engine number, plate, and both names.</li>
+    </ul>
+
+    <h2>When you're selling</h2>
+    <ul>
+      <li><strong>Meet in public.</strong> Same rules apply to you.</li>
+      <li><strong>Verify the buyer's payment.</strong> If using M-Pesa, confirm the money is actually in your account before handing over the bike. Screenshots can be faked.</li>
+      <li><strong>Don't accept partial payment without a written agreement.</strong></li>
+      <li><strong>Transfer the logbook properly.</strong> Use NTSA's TIMS portal to transfer ownership. An untransferred bike can come back to haunt you.</li>
+      <li><strong>Keep a copy of the sale agreement.</strong></li>
+    </ul>
+
+    <h2>Red flags</h2>
+    <ul>
+      <li>Price is way below market value.</li>
+      <li>Seller refuses to meet in person or insists on a deposit first.</li>
+      <li>Seller can't produce a logbook or says it's "with a friend".</li>
+      <li>Engine number or plate looks tampered with.</li>
+      <li>Seller is in a hurry and pressures you.</li>
+      <li>Seller wants payment via a third-party phone number.</li>
+    </ul>
+
+    <h2>If something goes wrong</h2>
+    <ul>
+      <li><strong>Report the listing</strong> using the report button on any listing page.</li>
+      <li><strong>Call 999 or 112</strong> if you believe a crime has occurred.</li>
+      <li><strong>Contact us</strong> at <a href="/contact.html">our contact page</a> — we can hide the listing, ban the seller, and provide records to police if needed.</li>
+    </ul>
+
+    <p class="lead" style="margin-top:32px"><strong>Senke Fiti does not take part in the transaction between buyer and seller.</strong> We connect you, but the deal is between you. Take these precautions seriously — they work.</p>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-col footer-brand">
+        <img src="/assets/logo.svg" alt="Senke Fiti" height="40">
+        <p class="footer-tag">Kenya's motorcycle-only marketplace.</p>
+        <div class="footer-social">
+          <a href="#" aria-label="Facebook">Facebook</a>
+          <a href="#" aria-label="Instagram">Instagram</a>
+          <a href="#" aria-label="TikTok">TikTok</a>
+          <a href="#" aria-label="WhatsApp">WhatsApp</a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h4>Marketplace</h4>
+        <a href="/">Browse bikes</a>
+        <a href="/upload.html">Post a bike</a>
+        <a href="/pricing.html">Pricing</a>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <a href="/faq.html">FAQ</a>
+        <a href="/safety.html">Safety tips</a>
+        <a href="/contact.html">Contact us</a>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <a href="/about.html">About</a>
+        <a href="/terms.html">Terms & conditions</a>
+        <a href="/privacy.html">Privacy policy</a>
+        <a href="/cookies.html">Cookie policy</a>
+      </div>
+    </div>
+    <p class="footer-copy">© <span id="year"></span> Senke Fiti. All rights reserved.</p>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

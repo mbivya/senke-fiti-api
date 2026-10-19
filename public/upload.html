@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Post a Motorcycle — Senke Fiti</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a href="/" class="brand"><img src="/assets/logo.svg" alt="Senke Fiti" height="46"></a>
+
+    <form class="header-search" id="header-search" action="/" method="GET">
+      <input type="text" name="q" id="header-search-input" placeholder="Search make or model...">
+    </form>
+
+    <nav id="nav">
+      <a href="/dashboard.html" class="nav-link hidden" id="nav-dashboard">My Listings</a>
+      <a href="/admin.html" class="nav-link hidden" id="nav-admin">Admin</a>
+      <a href="/upload.html" class="nav-cta">+ Post a bike</a>
+      <a href="/login.html" class="nav-link" id="nav-login">Log In</a>
+      <a href="/login.html" class="nav-link" id="nav-signup">Sign Up</a>
+      <span id="nav-user" class="hidden">
+        <span id="nav-name"></span>
+        <button id="logout-btn" class="btn-link">Log out</button>
+      </span>
+    </nav>
+
+    <button class="hamburger" id="hamburger" aria-label="Menu">☰</button>
+
+    <div class="mobile-menu" id="mobile-menu">
+      <span id="m-user-info" class="hidden" style="padding:8px;color:#888;font-size:13px"><span id="m-name"></span></span>
+      <a href="/" class="mobile-link">Browse bikes</a>
+      <a href="/dashboard.html" class="mobile-link hidden" id="m-dashboard">My Listings</a>
+      <a href="/admin.html" class="mobile-link hidden" id="m-admin">Admin</a>
+      <a href="/upload.html" class="mobile-link">+ Post a bike</a>
+      <div class="divider"></div>
+      <a href="/login.html" class="mobile-link" id="m-login">Log In</a>
+      <a href="/login.html" class="mobile-link" id="m-signup">Sign Up</a>
+      <button class="mobile-link hidden" id="m-logout">Log out</button>
+    </div>
+  </header>
+
+  <main class="listing-form-page">
+    <h1 id="upload-title">Post a Motorcycle</h1>
+    <p class="hint" id="upload-hint">Fill in the details below. Your listing goes live after payment.</p>
+
+    <form id="listing-form" class="listing-form" enctype="multipart/form-data">
+      <fieldset>
+        <legend>Bike details</legend>
+
+        <label>Make *
+          <input type="text" name="make" placeholder="e.g. Bajaj" required>
+        </label>
+
+        <label>Model *
+          <input type="text" name="model" placeholder="e.g. Boxer 150" required>
+        </label>
+
+        <div class="form-row">
+          <label>Year
+            <input type="number" name="year" min="1970" max="2099" placeholder="2019">
+          </label>
+          <label>Engine capacity (cc)
+            <input type="number" name="engine_cc" min="50" max="2000" placeholder="150">
+          </label>
+        </div>
+
+        <div class="form-row">
+          <label>Mileage (km)
+            <input type="number" name="mileage_km" min="0" placeholder="45000">
+          </label>
+          <label>Price (KSh) *
+            <input type="number" name="price_kes" min="1" placeholder="95000" required>
+          </label>
+        </div>
+
+        <div class="form-row">
+          <label>Condition *
+            <select name="condition" required>
+              <option value="">Select...</option>
+              <option value="used">Used</option>
+              <option value="new">New</option>
+            </select>
+          </label>
+          <label>Intended use
+            <select name="intended_use">
+              <option value="">Select...</option>
+              <option value="boda">Boda boda</option>
+              <option value="commuting">Commuting</option>
+              <option value="delivery">Delivery</option>
+              <option value="personal">Personal</option>
+            </select>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Location & description</legend>
+
+        <div class="form-row">
+          <label>Town *
+            <input type="text" name="location_town" placeholder="e.g. Kajiado" required>
+          </label>
+          <label>County
+            <input type="text" name="location_county" placeholder="e.g. Kajiado County">
+          </label>
+        </div>
+
+        <label>Description
+          <textarea name="description" rows="4" placeholder="Any extra details buyers should know"></textarea>
+        </label>
+
+        <label>Logbook status
+          <select name="logbook_status">
+            <option value="">Select...</option>
+            <option value="available">Available</option>
+            <option value="unavailable">Unavailable</option>
+            <option value="in_transfer">In transfer</option>
+          </select>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Photos (up to 10)</legend>
+        <label>Select photos
+          <input type="file" name="photos" accept="image/*" multiple id="photos-input">
+        </label>
+        <p class="hint">First photo will be the cover.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Documents (up to 5 PDFs)</legend>
+        <label>Logbook / insurance / other
+          <input type="file" name="documents" accept="application/pdf" multiple id="documents-input">
+        </label>
+      </fieldset>
+
+      <button type="submit" class="btn-primary" id="listing-submit">Save listing</button>
+      <p class="form-msg" id="listing-msg"></p>
+    </form>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-col footer-brand">
+        <img src="/assets/logo.svg" alt="Senke Fiti" height="40">
+        <p class="footer-tag">Kenya's motorcycle-only marketplace.</p>
+        <div class="footer-social">
+          <a href="#" aria-label="Facebook">Facebook</a>
+          <a href="#" aria-label="Instagram">Instagram</a>
+          <a href="#" aria-label="TikTok">TikTok</a>
+          <a href="#" aria-label="WhatsApp">WhatsApp</a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h4>Marketplace</h4>
+        <a href="/">Browse bikes</a>
+        <a href="/upload.html">Post a bike</a>
+        <a href="/pricing.html">Pricing</a>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <a href="/faq.html">FAQ</a>
+        <a href="/safety.html">Safety tips</a>
+        <a href="/contact.html">Contact us</a>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <a href="/about.html">About</a>
+        <a href="/terms.html">Terms & conditions</a>
+        <a href="/privacy.html">Privacy policy</a>
+        <a href="/cookies.html">Cookie policy</a>
+      </div>
+    </div>
+    <p class="footer-copy">© <span id="year"></span> Senke Fiti. All rights reserved.</p>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>
