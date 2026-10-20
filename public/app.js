@@ -706,32 +706,7 @@ async function handleDashboardAction(action, id) {
       });
       const data = await res.json();
       if (!res.ok) { alert(data.error || 'Could not start payment.'); return; }
-      
       alert('STK push sent to your phone. Enter your M-Pesa PIN to complete.');
-
-      // Start Polling
-      let attempts = 0;
-      const pollInterval = setInterval(async () => {
-        attempts++;
-        try {
-          const statusRes = await fetch('/api/payments/check-status', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ listing_id: id })
-          });
-          const statusData = await statusRes.json();
-          
-          if (statusData.status === 'success') {
-            clearInterval(pollInterval);
-            alert('Payment confirmed! Your listing is now active.');
-            loadDashboardListings();
-          } else if (statusData.status === 'no_pending_payment' || attempts > 20) {
-            clearInterval(pollInterval);
-            loadDashboardListings();
-          }
-        } catch (e) {}
-      }, 2000);
-
     } catch { alert('Network error.'); }
     return;
   }

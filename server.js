@@ -283,52 +283,11 @@ app.post('/api/payments/initiate', async (req, res) => {
       callbackUrl, 
       metadata: { first_name: firstName, last_name: lastName, listing_id, purpose } 
     });
-    
-    // Save the checkout ID to the database so we can poll it later if needed
-    if (result.id) {
-      await pool.query('INSERT INTO payments (id, listing_id, purpose, amount_kes, checkout_id, status) VALUES ($1, $2, $3, $4, $5, $6)', [generateId('pay'), listing_id, purpose, amount, result.id, 'pending']);
-    }
 
     res.json({ ok: true, message: 'STK push sent!', result });
   } catch (err) {
     console.error("KopoKopo Init Error:", err);
     res.status(400).json({ error: err.message });
-  }
-});
-
-// NEW: Check Status manually (The Poller)
-app.post('/api/payments/check-status', async (req, res) => {
-  const token = getCookie(req.headers.cookie, 'session');
-  if (!token) return res.status(401).json({ error: 'Not logged in' });
-
-  const { listing_id } = req.body;
-
-  try {
-    const paymentRes = await pool.query("SELECT checkout_id FROM payments WHERE listing_id = $1 AND status = 'pending' ORDER BY created_at DESC LIMIT 1", [listing_id]);
-    if (paymentRes.rows.length === 0 || !paymentRes.rows[0].checkout_id) {
-      return res.json({ status: 'no_pending_payment' });
-    }
-
-    const checkoutId = paymentRes.rows[0].checkout_id;
-    
-    // Ask KopoKopo for the status of this specific checkout ID
-    const kopokopoRes = await fetch(`https://api.kopokopo.com/api/v2/incoming_payments/${checkoutId}`, {
-       headers: { 'Authorization': `Bearer ${process.env.KOPOKOPO_ACCESS_TOKEN}` }
-    });
-    
-    // Note: KopoKopo requires a valid token. Since we don't have a helper function here, 
-    // we can just query their status endpoint if we have it. 
-    // If we can't reach it, we'll fall back to checking if the webhook updated the DB.
-    // For simplicity, let's just return whatever is in the DB.
-    
-    const isActive = await pool.query("SELECT status FROM listings WHERE id = $1", [listing_id]);
-    if (isActive.rows[0].status === 'active') {
-       return res.json({ status: 'success' });
-    }
-    
-    return res.json({ status: 'pending' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
   }
 });
 
@@ -357,8 +316,6 @@ app.post('/api/payments/webhook', async (req, res) => {
         await activateListing(pool, listingId, 12);
         await pool.query("UPDATE listings SET is_featured = true, featured_until = now() + interval '30 days' WHERE id = $1", [listingId]);
       }
-      // Mark the payment record as successful
-      await pool.query("UPDATE payments SET status = 'success', updated_at = now() WHERE listing_id = $1 AND status = 'pending'", [listingId]);
     }
     
     res.json({ ok: true, processed: true });
