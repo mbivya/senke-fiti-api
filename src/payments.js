@@ -1,4 +1,5 @@
 // src/payments.js
+import crypto from 'crypto';
 
 const SANDBOX_BASE = 'https://sandbox.kopokopo.com';
 const LIVE_BASE    = 'https://api.kopokopo.com';
@@ -20,8 +21,8 @@ async function getAccessToken() {
 
   const res = await fetch(`${baseUrl()}/oauth/token`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
+    headers: { 'Content-Type': 'application/json' }, // JSON, just like Wakanda
+    body: JSON.stringify({
       grant_type: 'client_credentials',
       client_id: process.env.KOPOKOPO_CLIENT_ID,
       client_secret: process.env.KOPOKOPO_CLIENT_SECRET
@@ -46,7 +47,7 @@ async function getAccessToken() {
   }
 
   cachedToken = data.access_token;
-  cachedTokenExpiry = now + 50 * 60 * 1000; // Cache for 50 minutes
+  cachedTokenExpiry = now + 50 * 60 * 1000;
 
   return cachedToken;
 }
@@ -56,7 +57,10 @@ async function getAccessToken() {
 export async function initiateStkPush({ phone, amount, callbackUrl, metadata }) {
   const token = await getAccessToken();
 
-  // THE FIX: callback_url must be nested inside _links
+  // 1. Generate the Idempotency Key (Required by KopoKopo)
+  const idempotencyKey = crypto.randomBytes(16).toString('hex');
+
+  // 2. Structure the payload exactly like Wakanda Fries
   const body = {
     payment_channel: 'M-PESA STK Push',
     till_number: process.env.KOPOKOPO_TILL, 
@@ -69,12 +73,12 @@ export async function initiateStkPush({ phone, amount, callbackUrl, metadata }) 
       currency: 'KES',
       value: amount
     },
-    _links: {
-      callback_url: callbackUrl
-    },
     metadata: {
       listing_id: metadata.listing_id,
       purpose: metadata.purpose
+    },
+    _links: {
+      callback_url: callbackUrl
     }
   };
 
@@ -82,7 +86,8 @@ export async function initiateStkPush({ phone, amount, callbackUrl, metadata }) 
     method: 'POST',
     headers: { 
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
+      'Authorization': `Bearer ${token}`,
+      'Idempotency-Key': idempotencyKey // 3. Add the header
     },
     body: JSON.stringify(body)
   });
