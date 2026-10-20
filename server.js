@@ -428,18 +428,34 @@ app.post('/api/admin/users/:id/role', async (req, res) => {
 
 // --- PAYMENT ROUTES ---
 app.post('/api/payments/initiate', async (req, res) => {
+  const token = getCookie(req.headers.cookie, 'session');
+  if (!token) return res.status(401).json({ error: 'Not logged in' });
+
   const { listing_id, purpose } = req.body;
-  const phone = '254712345678'; 
-  const PRICES = { standard_listing: 300, featured_listing: 1000, verified_badge: 500 };
-  const amount = PRICES[purpose];
-  if (!amount) return res.status(400).json({ error: 'Unknown purpose.' });
-
-  const callbackUrl = `${req.protocol}://${req.get('host')}/api/payments/webhook`;
-
+  
   try {
-    const result = await initiateStkPush({ phone, amount, callbackUrl, metadata: { first_name: 'Test', last_name: 'User', listing_id, purpose } });
+    const userRes = await pool.query('SELECT u.phone, u.full_name FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = $1', [token]);
+    if (userRes.rows.length === 0) return res.status(401).json({ error: 'Invalid session' });
+    const user = userRes.rows[0];
+
+    const PRICES = { standard_listing: 300, featured_listing: 1000, verified_badge: 500 };
+    const amount = PRICES[purpose];
+    if (!amount) return res.status(400).json({ error: 'Unknown purpose.' });
+
+    const callbackUrl = `${req.protocol}://${req.get('host')}/api/payments/webhook`;
+    const firstName = user.full_name ? user.full_name.split(' ')[0] : 'Senke';
+    const lastName = user.full_name && user.full_name.split(' ').length > 1 ? user.full_name.split(' ')[1] : 'Fiti';
+
+    const result = await initiateStkPush({ 
+      phone: user.phone, 
+      amount, 
+      callbackUrl, 
+      metadata: { first_name: firstName, last_name: lastName, listing_id, purpose } 
+    });
+    
     res.json({ ok: true, message: 'STK push sent!', result });
   } catch (err) {
+    console.error("KopoKopo Init Error:", err);
     res.status(400).json({ error: err.message });
   }
 });
@@ -447,146 +463,39 @@ app.post('/api/payments/initiate', async (req, res) => {
 app.post('/api/payments/webhook', async (req, res) => {
   const rawBody = JSON.stringify(req.body);
   const signature = req.headers['x-kopokopo-signature'];
+  
+  // Bypass signature check for initial testing if needed, but in prod it's required
   const valid = await verifyWebhookSignature(rawBody, signature);
   if (!valid) return res.status(401).json({ error: 'Invalid signature' });
+
   console.log('Webhook received:', req.body);
-  res.json({ ok: true });
+
+  try {
+    const payload = req.body;
+    const attrs = payload?.data?.attributes || payload;
+    const status = attrs?.status;
+    const metadata = attrs?.metadata || payload?.metadata || {};
+    const listingId = metadata?.listing_id;
+    const purpose = metadata?.purpose;
+
+    const isSuccess = String(status).toLowerCase() === 'success' || String(status).toLowerCase() === 'complete';
+
+    if (isSuccess && listingId) {
+      if (purpose === 'standard_listing') {
+        await activateListing(pool, listingId, 12); // 12 months
+      } else if (purpose === 'featured_listing') {
+        await activateListing(pool, listingId, 12);
+        await pool.query("UPDATE listings SET is_featured = true, featured_until = now() + interval '30 days' WHERE id = $1", [listingId]);
+      }
+    }
+    
+    res.json({ ok: true, processed: true });
+  } catch (err) {
+    console.error('Webhook processing error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.listen(port, () => {
   console.log(`Senke Fiti Backend running on port ${port}`);
-});// src/payments.js
-
-const SANDBOX_BASE = 'https://sandbox.kopokopo.com';
-const LIVE_BASE    = 'https://api.kopokopo.com';
-
-let cachedToken = null;
-let cachedTokenExpiry = 0;
-
-function baseUrl() {
-  return process.env.KOPOKOPO_ENV === 'production' ? LIVE_BASE : SANDBOX_BASE;
-}
-
-// ---------- AUTH ----------
-
-async function getAccessToken() {
-  const now = Date.now();
-  if (cachedToken && now < cachedTokenExpiry) {
-    return cachedToken;
-  }
-
-  const res = await fetch(`${baseUrl()}/oauth/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: process.env.KOPOKOPO_CLIENT_ID,
-      client_secret: process.env.KOPOKOPO_CLIENT_SECRET
-    })
-  });
-
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`KopoKopo auth failed (${res.status}): ${text.slice(0, 400)}`);
-  }
-
-  let data;
-  try { data = JSON.parse(text); } catch {
-    throw new Error('KopoKopo auth returned non-JSON: ' + text.slice(0, 200));
-  }
-
-  if (!data.access_token) {
-    throw new Error('KopoKopo auth: no access_token. Response: ' + text.slice(0, 300));
-  }
-
-  cachedToken = data.access_token;
-  cachedTokenExpiry = now + 50 * 60 * 1000; // Cache for 50 minutes
-
-  return cachedToken;
-}
-
-// ---------- STK PUSH ----------
-
-export async function initiateStkPush({ phone, amount, callbackUrl, metadata }) {
-  const token = await getAccessToken();
-
-  // We use the raw till number from your .env (e.g., 8718324)
-  const body = {
-    payment_channel: 'M-PESA STK Push',
-    till_number: process.env.KOPOKOPO_TILL, 
-    subscriber: {
-      first_name: metadata.first_name || 'Senke',
-      last_name: metadata.last_name || 'Fiti',
-      phone_number: '+' + phone
-    },
-    amount: {
-      currency: 'KES',
-      value: amount
-    },
-    callback_url: callbackUrl,
-    metadata: {
-      listing_id: metadata.listing_id,
-      purpose: metadata.purpose
-    }
-  };
-
-  const res = await fetch(`${baseUrl()}/api/v2/incoming_payments`, {
-    method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify(body)
-  });
-
-  const text = await res.text();
-
-  if (!res.ok) {
-    if (res.status === 429) {
-      throw new Error("A payment request is already pending for this phone number. Please wait a moment and try again.");
-    }
-    let detail = text;
-    try {
-      const parsed = JSON.parse(text);
-      detail = parsed.message || parsed.error || parsed.errors || JSON.stringify(parsed);
-    } catch {}
-    throw new Error(`STK push failed (${res.status}): ${detail}`);
-  }
-
-  const location = res.headers.get('Location');
-  const resourceId = location ? location.split('/').pop() : null;
-
-  return {
-    id: resourceId,
-    location,
-    raw: text
-  };
-}
-
-// ---------- WEBHOOK SIGNATURE VERIFICATION ----------
-
-export async function verifyWebhookSignature(rawBody, signatureHeader) {
-  if (!signatureHeader) return false;
-
-  const [algo, providedHex] = signatureHeader.split('=');
-  if (!algo || !providedHex) return false;
-
-  // KopoKopo uses the client_secret as the HMAC key
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(process.env.KOPOKOPO_CLIENT_SECRET),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-
-  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody));
-  const computedHex = [...new Uint8Array(mac)].map(b => b.toString(16).padStart(2, '0')).join('');
-
-  if (computedHex.length !== providedHex.length) return false;
-  let diff = 0;
-  for (let i = 0; i < computedHex.length; i++) {
-    diff |= computedHex.charCodeAt(i) ^ providedHex.toLowerCase().charCodeAt(i);
-  }
-  return diff === 0;
-}
+});

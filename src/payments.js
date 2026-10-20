@@ -53,6 +53,7 @@ async function getAccessToken() {
 export async function initiateStkPush({ phone, amount, callbackUrl, metadata }) {
   const token = await getAccessToken();
 
+  // We use the raw till number from your .env (e.g., 8718324)
   const body = {
     payment_channel: 'M-PESA STK Push',
     till_number: process.env.KOPOKOPO_TILL, 
@@ -84,6 +85,9 @@ export async function initiateStkPush({ phone, amount, callbackUrl, metadata }) 
   const text = await res.text();
 
   if (!res.ok) {
+    if (res.status === 429) {
+      throw new Error("A payment request is already pending for this phone number. Please wait a moment and try again.");
+    }
     let detail = text;
     try {
       const parsed = JSON.parse(text);
@@ -107,9 +111,10 @@ export async function initiateStkPush({ phone, amount, callbackUrl, metadata }) 
 export async function verifyWebhookSignature(rawBody, signatureHeader) {
   if (!signatureHeader) return false;
 
-  const [algo, providedHex] = String(signatureHeader).split('=');
+  const [algo, providedHex] = signatureHeader.split('=');
   if (!algo || !providedHex) return false;
 
+  // KopoKopo uses the client_secret as the HMAC key
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(process.env.KOPOKOPO_CLIENT_SECRET),
