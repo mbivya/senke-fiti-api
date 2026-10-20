@@ -538,7 +538,6 @@ async function initDashboard() {
     document.getElementById('verify-banner').classList.remove('hidden');
   }
 
-  // Listen to the static tabs we added to dashboard.html
   const tabContainer = document.getElementById('dashboard-tabs');
   if (tabContainer) {
     tabContainer.querySelectorAll('.admin-tab').forEach(tab => {
@@ -585,13 +584,11 @@ async function loadDashboardListings() {
       return;
     }
 
-    // Filter based on tab
     let filteredListings = listings;
     if (currentDashboardTab === 'active') filteredListings = listings.filter(l => l.status === 'active');
     else if (currentDashboardTab === 'draft') filteredListings = listings.filter(l => l.status === 'draft');
     else if (currentDashboardTab === 'expired') filteredListings = listings.filter(l => l.status === 'expired');
 
-    // ADDED: Warning message for drafts
     if (currentDashboardTab === 'draft' && counts.draft > 0 && warningContainer) {
       warningContainer.innerHTML = `
         <div class="verify-banner" style="background:#ffe6e6; border-color:#ffcccc; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
@@ -669,7 +666,6 @@ async function loadDashboardListings() {
   }
 }
 
-// ADDED: Function for bulk deleting drafts
 window.deleteAllDrafts = async function() {
   if (!confirm('Are you sure you want to delete ALL your draft listings? This cannot be undone.')) return;
   try {
@@ -710,7 +706,32 @@ async function handleDashboardAction(action, id) {
       });
       const data = await res.json();
       if (!res.ok) { alert(data.error || 'Could not start payment.'); return; }
+      
       alert('STK push sent to your phone. Enter your M-Pesa PIN to complete.');
+
+      // Start Polling
+      let attempts = 0;
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        try {
+          const statusRes = await fetch('/api/payments/check-status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ listing_id: id })
+          });
+          const statusData = await statusRes.json();
+          
+          if (statusData.status === 'success') {
+            clearInterval(pollInterval);
+            alert('Payment confirmed! Your listing is now active.');
+            loadDashboardListings();
+          } else if (statusData.status === 'no_pending_payment' || attempts > 20) {
+            clearInterval(pollInterval);
+            loadDashboardListings();
+          }
+        } catch (e) {}
+      }, 2000);
+
     } catch { alert('Network error.'); }
     return;
   }
@@ -895,12 +916,10 @@ async function loadAllListings(q = '') {
     if (items.length === 0) { container.innerHTML = '<p class="loading">No listings found.</p>'; return; }
     
     container.innerHTML = items.map(l => {
-      // Show Approve for Drafts or Hidden (suspended) listings
       const approveBtn = (l.status === 'draft' || l.status === 'hidden')
         ? `<button class="btn-primary btn-sm" data-action="approve" data-id="${l.id}">Approve</button>` 
         : '';
         
-      // Show Suspend only for Active listings
       const suspendBtn = l.status === 'active'
         ? `<button class="danger btn-sm" data-action="suspend" data-id="${l.id}">Suspend</button>`
         : '';
