@@ -102,7 +102,13 @@ export async function getListing(pool, listingId) {
     r2_key: getPublicUrl(img.r2_key)
   }));
 
-  return { ...listing, images, documents: docsRes.rows };
+  // Apply the full URL conversion to documents as well
+  const documents = docsRes.rows.map(doc => ({
+    ...doc,
+    r2_key: getPublicUrl(doc.r2_key)
+  }));
+
+  return { ...listing, images, documents };
 }
 
 // Used by Admin to bypass payment
