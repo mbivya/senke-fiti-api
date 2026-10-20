@@ -415,17 +415,16 @@ function renderListingDetail(l) {
       ).join('')}</div>`
     : '';
 
-  // --- PDF VIEWING LOGIC ---
+  // --- PDF VIEWING LOGIC (Native Browser Viewer) ---
   let docHtml = '';
   if (l.documents && l.documents.length > 0) {
     docHtml = `<div class="detail-description" style="margin-top:16px">
       <h3 style="margin-bottom:10px;font-size:15px">Documents</h3>
       <ul style="list-style:none;padding:0;">`;
     l.documents.forEach(doc => {
-      const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(doc.r2_key)}&embedded=true`;
       docHtml += `
         <li style="margin-bottom:10px;">
-          <button class="btn-secondary" onclick="document.getElementById('pdf-viewer').classList.toggle('hidden'); document.getElementById('pdf-frame').src='${viewerUrl}';">
+          <button class="btn-secondary" onclick="document.getElementById('pdf-viewer').classList.toggle('hidden'); document.getElementById('pdf-frame').src='${doc.r2_key}';">
             📄 View ${escapeHtml(doc.doc_type)}
           </button>
         </li>
@@ -841,6 +840,10 @@ async function loadAllListings(q = '') {
       const approveBtn = l.status === 'draft' 
         ? `<button class="btn-primary btn-sm" data-action="approve" data-id="${l.id}">Approve</button>` 
         : '';
+        
+      const suspendBtn = l.status === 'active'
+        ? `<button class="danger btn-sm" data-action="suspend" data-id="${l.id}">Suspend</button>`
+        : '';
 
       return `
         <div class="admin-item">
@@ -850,16 +853,22 @@ async function loadAllListings(q = '') {
           </div>
           <div class="admin-item-actions">
             ${approveBtn}
+            ${suspendBtn}
             <a href="/listing.html?id=${encodeURIComponent(l.id)}" target="_blank" class="btn-secondary btn-sm">View</a>
           </div>
         </div>
       `;
     }).join('');
 
-    container.querySelectorAll('button[data-action="approve"]').forEach(btn => {
+    container.querySelectorAll('button[data-action]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (!confirm('Approve this listing and make it active?')) return;
-        await fetch(`/api/admin/listings/${btn.dataset.id}/approve`, { method: 'POST' });
+        if (btn.dataset.action === 'approve') {
+          if (!confirm('Approve this listing and make it active?')) return;
+          await fetch(`/api/admin/listings/${btn.dataset.id}/approve`, { method: 'POST' });
+        } else if (btn.dataset.action === 'suspend') {
+          if (!confirm('Suspend this listing? It will be hidden from the public.')) return;
+          await fetch(`/api/admin/listings/${btn.dataset.id}/suspend`, { method: 'POST' });
+        }
         loadAllListings(q); 
       });
     });

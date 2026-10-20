@@ -7,8 +7,7 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import { createClient } from '@supabase/supabase-js';
 
-// Import activateListing from listings.js
-import { searchListings, getUserListings, getListing, activateListing } from './src/listings.js';
+import { activateListing, searchListings, getUserListings, getListing } from './src/listings.js';
 import { hashPassword, verifyPassword, generateId, normalizePhone, getCookie, buildSessionCookie, buildLogoutCookie } from './src/auth.js';
 import { initiateStkPush, verifyWebhookSignature } from './src/payments.js';
 import { 
@@ -150,6 +149,23 @@ app.get('/api/listings/mine', async (req, res) => {
     const listings = await getUserListings(pool, userRes.rows[0].user_id);
     res.json({ listings });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE ALL DRAFTS FOR USER
+app.post('/api/listings/delete-drafts', async (req, res) => {
+  const token = getCookie(req.headers.cookie, 'session');
+  if (!token) return res.status(401).json({ error: 'Not logged in' });
+
+  try {
+    const userRes = await pool.query('SELECT user_id FROM sessions WHERE token = $1', [token]);
+    if (userRes.rows.length === 0) return res.status(401).json({ error: 'Invalid session' });
+    const userId = userRes.rows[0].user_id;
+
+    await pool.query("DELETE FROM listings WHERE user_id = $1 AND status = 'draft'", [userId]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // SECURED GET LISTING ROUTE
@@ -363,10 +379,18 @@ app.get('/api/admin/listings', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// NEW ROUTE: Approve Listing (Bypass Payment)
+// ADMIN: Approve Listing (Bypass Payment)
 app.post('/api/admin/listings/:id/approve', async (req, res) => {
   try {
     await activateListing(pool, req.params.id, 12);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ADMIN: Suspend/Remove a listing
+app.post('/api/admin/listings/:id/suspend', async (req, res) => {
+  try {
+    await pool.query("UPDATE listings SET status = 'hidden', updated_at = now() WHERE id = $1", [req.params.id]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
