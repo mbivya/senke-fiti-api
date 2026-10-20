@@ -30,9 +30,9 @@ async function getAccessToken() {
 
   const text = await res.text();
   if (!res.ok) {
-    console.error("=== AUTH ERROR RAW ===");
+    console.error("=== RAW KOPOKOPO AUTH ERROR ===");
     console.error(text);
-    console.error("======================");
+    console.error("===============================");
     throw new Error(`KopoKopo auth failed (${res.status}): ${text.slice(0, 400)}`);
   }
 
@@ -46,7 +46,7 @@ async function getAccessToken() {
   }
 
   cachedToken = data.access_token;
-  cachedTokenExpiry = now + 50 * 60 * 1000;
+  cachedTokenExpiry = now + 50 * 60 * 1000; // Cache for 50 minutes
 
   return cachedToken;
 }
@@ -56,6 +56,7 @@ async function getAccessToken() {
 export async function initiateStkPush({ phone, amount, callbackUrl, metadata }) {
   const token = await getAccessToken();
 
+  // We use the raw till number from your .env (e.g., 8718324)
   const body = {
     payment_channel: 'M-PESA STK Push',
     till_number: process.env.KOPOKOPO_TILL, 
@@ -91,7 +92,7 @@ export async function initiateStkPush({ phone, amount, callbackUrl, metadata }) 
       throw new Error("A payment request is already pending for this phone number. Please wait a moment and try again.");
     }
     
-    // THIS IS THE CRITICAL LOGGING
+    // THIS IS THE CRITICAL LOGGING WE ADDED
     console.error("=== RAW KOPOKOPO STK ERROR ===");
     console.error(text);
     console.error("==============================");
