@@ -1,6 +1,4 @@
-// ============================================
-// SENKE FITI — FRONTEND
-// ============================================
+// public/app.js
 
 document.addEventListener('DOMContentLoaded', () => {
   initYear();
@@ -415,7 +413,6 @@ function renderListingDetail(l) {
       ).join('')}</div>`
     : '';
 
-  // --- PDF VIEWING LOGIC (Native Browser Viewer) ---
   let docHtml = '';
   if (l.documents && l.documents.length > 0) {
     docHtml = `<div class="detail-description" style="margin-top:16px">
@@ -706,7 +703,34 @@ async function handleDashboardAction(action, id) {
       });
       const data = await res.json();
       if (!res.ok) { alert(data.error || 'Could not start payment.'); return; }
-      alert('STK push sent to your phone. Enter your M-Pesa PIN to complete.');
+      
+      alert('STK push sent. Please enter your M-Pesa PIN.');
+
+      let attempts = 0;
+      const maxAttempts = 20; 
+      
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        try {
+          const statusRes = await fetch('/api/payments/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ listing_id: id })
+          });
+          const statusData = await statusRes.json();
+          
+          if (statusData.status === 'success') {
+            clearInterval(pollInterval);
+            alert('Payment confirmed! Your listing is now active.');
+            loadDashboardListings();
+          } else if (attempts >= maxAttempts) {
+            clearInterval(pollInterval);
+            alert('Payment status check timed out. Please refresh the page in a minute.');
+            loadDashboardListings();
+          }
+        } catch (e) {}
+      }, 3000); 
+
     } catch { alert('Network error.'); }
     return;
   }
