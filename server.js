@@ -5,7 +5,7 @@ import pkg from 'pg';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { createClient } from '@supabase/supabase-js';
 
 import { hashPassword, verifyPassword, generateId, normalizePhone, getCookie, buildSessionCookie, buildLogoutCookie } from './src/auth.js';
 import { searchListings, getUserListings, getListing } from './src/listings.js';
@@ -30,40 +30,24 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Initialize S3 Client for Supabase Storage
-const s3Client = new S3Client({
-  region: process.env.S3_REGION || 'eu-west-1',
-  endpoint: process.env.S3_ENDPOINT,
-  credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY,
-    secretAccessKey: process.env.S3_SECRET_KEY,
-  },
-  forcePathStyle: true, // Required for Supabase
-});
+// Use the official Supabase client
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- HELPER: Upload to Supabase via S3 ---
+// --- HELPER: Upload to Supabase ---
 async function uploadToSupabase(filePath, fileBuffer, mimetype) {
-  const command = new PutObjectCommand({
-    Bucket: 'senke-fiti',
-    Key: filePath,
-    Body: fileBuffer,
-    ContentType: mimetype,
-  });
-  
-  try {
-    await s3Client.send(command);
-    console.log(`✅ Uploaded to S3: ${filePath}`);
-  } catch (err) {
-    console.error(`❌ S3 Upload Error for ${filePath}:`, err.message);
-    throw new Error(`S3 Upload failed: ${err.message}`);
+  const { data, error } = await supabase.storage.from('senke-fiti').upload(filePath, fileBuffer, { contentType: mimetype });
+  if (error) {
+    console.error(`❌ Supabase Upload Error for ${filePath}:`, error.message);
+    throw new Error(error.message);
   }
+  console.log(`✅ Uploaded to Supabase: ${filePath}`);
+  return data;
 }
 
 // --- AUTHENTICATION ROUTES ---
