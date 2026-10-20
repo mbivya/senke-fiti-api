@@ -59,8 +59,9 @@ async function uploadToSupabase(filePath, fileBuffer, mimetype) {
   
   try {
     await s3Client.send(command);
+    console.log(`✅ Uploaded to S3: ${filePath}`);
   } catch (err) {
-    console.error('S3 Upload Error:', err);
+    console.error(`❌ S3 Upload Error for ${filePath}:`, err.message);
     throw new Error(`S3 Upload failed: ${err.message}`);
   }
 }
