@@ -65,14 +65,26 @@ export async function initiateStkPush({ phone, amount, callbackUrl, metadata }) 
 
   const location = res.headers.get('Location');
   const resourceId = location ? location.split('/').pop() : null;
+  
   return { id: resourceId, location, raw: text };
 }
 
-export async function verifyWebhookSignature(rawBody, signatureHeader) {
-  if (!signatureHeader) return false;
-  const [algo, providedHex] = signatureHeader.split('=');
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(process.env.KOPOKOPO_CLIENT_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody));
-  const computedHex = [...new Uint8Array(mac)].map(b => b.toString(16).padStart(2, '0')).join('');
-  return computedHex === providedHex.toLowerCase();
+export async function checkKopoKopoStatus(checkoutId) {
+  const token = await getAccessToken();
+  
+  const res = await fetch(`${baseUrl()}/api/v2/incoming_payments/${checkoutId}`, {
+    method: 'GET',
+    headers: { 
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  const text = await res.text();
+  if (!res.ok) {
+    console.error(`Status check failed (${res.status}): ${text}`);
+    return null;
+  }
+  
+  return JSON.parse(text);
 }
