@@ -5,7 +5,11 @@ import pkg from 'pg';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
-import https from 'https'; // Using raw HTTPS instead of fetch
+import { createClient } from '@supabase/supabase-js';
+import { Agent, setGlobalDispatcher } from 'undici';
+
+// FORCE NODE TO USE IPV4 AND IGNORE SSL ISSUES
+setGlobalDispatcher(new Agent({ connect: { rejectUnauthorized: false, family: 4 } }));
 
 import { hashPassword, verifyPassword, generateId, normalizePhone, getCookie, buildSessionCookie, buildLogoutCookie } from './src/auth.js';
 import { searchListings, getUserListings, getListing } from './src/listings.js';
@@ -30,6 +34,11 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+const supabase = createClient(
+  process.env.SUPABASE_URL, 
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
 const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(express.json());
@@ -37,44 +46,13 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- HELPER: Raw HTTPS Upload to Supabase ---
-function uploadToSupabase(filePath, fileBuffer, mimetype) {
-  return new Promise((resolve, reject) => {
-    // We parse the URL from .env so it matches your project exactly
-    const url = new URL(process.env.SUPABASE_URL);
-    
-    const options = {
-      hostname: url.hostname,
-      path: `/storage/v1/object/senke-fiti/${filePath}`,
-      method: 'POST',
-      family: 4, // Force IPv4
-      headers: {
-        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        'Content-Type': mimetype,
-        'Content-Length': fileBuffer.length
-      }
-    };
-
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(data);
-        } else {
-          reject(new Error(`Supabase upload failed (${res.statusCode}): ${data}`));
-        }
-      });
-    });
-
-    req.on('error', (err) => reject(err));
-    req.write(fileBuffer);
-    req.end();
-  });
+// --- HELPER: Upload to Supabase ---
+async function uploadToSupabase(filePath, fileBuffer, mimetype) {
+  const { error } = await supabase.storage.from('senke-fiti').upload(filePath, fileBuffer, { contentType: mimetype });
+  if (error) throw new Error(error.message);
 }
 
 // --- AUTHENTICATION ROUTES ---
-
 app.post('/api/signup', async (req, res) => {
   const { phone, password, full_name } = req.body;
   if (!phone || !password || !full_name) return res.status(400).json({ error: 'All fields required.' });
@@ -157,7 +135,6 @@ app.post('/api/logout', async (req, res) => {
 });
 
 // --- LISTING ROUTES ---
-
 app.get('/api/listings', async (req, res) => {
   try {
     const listings = await searchListings(pool, req.query);
@@ -185,6 +162,7 @@ app.get('/api/listings/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// DELETE LISTING
 app.post('/api/listings/:id/delete', async (req, res) => {
   const token = getCookie(req.headers.cookie, 'session');
   if (!token) return res.status(401).json({ error: 'Not logged in' });
@@ -208,6 +186,7 @@ app.post('/api/listings/:id/delete', async (req, res) => {
   }
 });
 
+// CREATE NEW LISTING
 app.post('/api/listings', upload.fields([{ name: 'photos', maxCount: 10 }, { name: 'documents', maxCount: 5 }]), async (req, res) => {
   const token = getCookie(req.headers.cookie, 'session');
   if (!token) return res.status(401).json({ error: 'Not logged in' });
@@ -230,7 +209,6 @@ app.post('/api/listings', upload.fields([{ name: 'photos', maxCount: 10 }, { nam
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'draft')
     `, [listingId, userId, make, model, year || null, engine_cc || null, mileage_km || null, price_kes, condition, intended_use || null, location_town, location_county || null, description || null, logbook_status || null]);
 
-    // Upload Photos via raw HTTPS
     if (req.files && req.files.photos) {
       for (let i = 0; i < req.files.photos.length; i++) {
         const file = req.files.photos[i];
@@ -238,19 +216,16 @@ app.post('/api/listings', upload.fields([{ name: 'photos', maxCount: 10 }, { nam
         const fileName = `listings/${listingId}/photos/${generateId()}.${fileExt}`;
         
         await uploadToSupabase(fileName, file.buffer, file.mimetype);
-        
         await pool.query(`INSERT INTO listing_images (id, listing_id, r2_key, sort_order) VALUES ($1, $2, $3, $4)`, [generateId('img'), listingId, fileName, i]);
       }
     }
 
-    // Upload Documents via raw HTTPS
     if (req.files && req.files.documents) {
       for (const file of req.files.documents) {
         const fileExt = file.originalname.split('.').pop();
         const fileName = `listings/${listingId}/documents/${generateId()}.${fileExt}`;
         
         await uploadToSupabase(fileName, file.buffer, file.mimetype);
-        
         await pool.query(`INSERT INTO listing_documents (id, listing_id, r2_key, doc_type) VALUES ($1, $2, $3, $4)`, [generateId('doc'), listingId, fileName, 'logbook']);
       }
     }
@@ -258,6 +233,72 @@ app.post('/api/listings', upload.fields([{ name: 'photos', maxCount: 10 }, { nam
     res.status(201).json({ ok: true, listing_id: listingId });
   } catch (err) {
     console.error('Create listing error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// UPDATE EXISTING LISTING
+app.put('/api/listings/:id', upload.fields([{ name: 'photos', maxCount: 10 }, { name: 'documents', maxCount: 5 }]), async (req, res) => {
+  const token = getCookie(req.headers.cookie, 'session');
+  if (!token) return res.status(401).json({ error: 'Not logged in' });
+
+  try {
+    const userRes = await pool.query('SELECT user_id FROM sessions WHERE token = $1', [token]);
+    if (userRes.rows.length === 0) return res.status(401).json({ error: 'Invalid session' });
+    const userId = userRes.rows[0].user_id;
+
+    const listingId = req.params.id;
+
+    // Verify ownership
+    const listingRes = await pool.query('SELECT user_id FROM listings WHERE id = $1', [listingId]);
+    if (listingRes.rows.length === 0) return res.status(404).json({ error: 'Listing not found.' });
+    if (listingRes.rows[0].user_id !== userId) return res.status(403).json({ error: 'Not your listing.' });
+
+    const { make, model, price_kes, condition, location_town, year, engine_cc, mileage_km, intended_use, location_county, description, logbook_status } = req.body;
+    
+    if (!make || !model || !price_kes || !condition || !location_town) {
+      return res.status(400).json({ error: 'Missing required fields.' });
+    }
+
+    // Update core details
+    await pool.query(`
+      UPDATE listings SET
+        make = $1, model = $2, year = $3, engine_cc = $4, mileage_km = $5, 
+        price_kes = $6, condition = $7, intended_use = $8, location_town = $9, 
+        location_county = $10, description = $11, logbook_status = $12, updated_at = now()
+      WHERE id = $13
+    `, [make, model, year || null, engine_cc || null, mileage_km || null, price_kes, condition, intended_use || null, location_town, location_county || null, description || null, logbook_status || null, listingId]);
+
+    // Upload new photos if provided
+    if (req.files && req.files.photos && req.files.photos.length > 0) {
+      // Get current max sort_order
+      const maxOrderRes = await pool.query('SELECT MAX(sort_order) as max FROM listing_images WHERE listing_id = $1', [listingId]);
+      let startOrder = (maxOrderRes.rows[0].max || 0) + 1;
+
+      for (let i = 0; i < req.files.photos.length; i++) {
+        const file = req.files.photos[i];
+        const fileExt = file.originalname.split('.').pop();
+        const fileName = `listings/${listingId}/photos/${generateId()}.${fileExt}`;
+        
+        await uploadToSupabase(fileName, file.buffer, file.mimetype);
+        await pool.query(`INSERT INTO listing_images (id, listing_id, r2_key, sort_order) VALUES ($1, $2, $3, $4)`, [generateId('img'), listingId, fileName, startOrder + i]);
+      }
+    }
+
+    // Upload new documents if provided
+    if (req.files && req.files.documents && req.files.documents.length > 0) {
+      for (const file of req.files.documents) {
+        const fileExt = file.originalname.split('.').pop();
+        const fileName = `listings/${listingId}/documents/${generateId()}.${fileExt}`;
+        
+        await uploadToSupabase(fileName, file.buffer, file.mimetype);
+        await pool.query(`INSERT INTO listing_documents (id, listing_id, r2_key, doc_type) VALUES ($1, $2, $3, $4)`, [generateId('doc'), listingId, fileName, 'logbook']);
+      }
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Update listing error:', err);
     res.status(500).json({ error: err.message });
   }
 });
