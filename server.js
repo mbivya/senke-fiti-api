@@ -5,11 +5,7 @@ import pkg from 'pg';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
-import { createClient } from '@supabase/supabase-js';
-import { Agent, setGlobalDispatcher } from 'undici';
-
-// FORCE NODE TO USE IPV4 AND IGNORE SSL ISSUES
-setGlobalDispatcher(new Agent({ connect: { rejectUnauthorized: false, family: 4 } }));
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 import { hashPassword, verifyPassword, generateId, normalizePhone, getCookie, buildSessionCookie, buildLogoutCookie } from './src/auth.js';
 import { searchListings, getUserListings, getListing } from './src/listings.js';
@@ -34,10 +30,16 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-const supabase = createClient(
-  process.env.SUPABASE_URL, 
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+// Initialize S3 Client for Supabase Storage
+const s3Client = new S3Client({
+  region: process.env.S3_REGION || 'eu-west-1',
+  endpoint: process.env.S3_ENDPOINT,
+  credentials: {
+    accessKeyId: process.env.S3_ACCESS_KEY,
+    secretAccessKey: process.env.S3_SECRET_KEY,
+  },
+  forcePathStyle: true, // Required for Supabase
+});
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -46,10 +48,21 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- HELPER: Upload to Supabase ---
+// --- HELPER: Upload to Supabase via S3 ---
 async function uploadToSupabase(filePath, fileBuffer, mimetype) {
-  const { error } = await supabase.storage.from('senke-fiti').upload(filePath, fileBuffer, { contentType: mimetype });
-  if (error) throw new Error(error.message);
+  const command = new PutObjectCommand({
+    Bucket: 'senke-fiti',
+    Key: filePath,
+    Body: fileBuffer,
+    ContentType: mimetype,
+  });
+  
+  try {
+    await s3Client.send(command);
+  } catch (err) {
+    console.error('S3 Upload Error:', err);
+    throw new Error(`S3 Upload failed: ${err.message}`);
+  }
 }
 
 // --- AUTHENTICATION ROUTES ---
@@ -249,7 +262,6 @@ app.put('/api/listings/:id', upload.fields([{ name: 'photos', maxCount: 10 }, { 
 
     const listingId = req.params.id;
 
-    // Verify ownership
     const listingRes = await pool.query('SELECT user_id FROM listings WHERE id = $1', [listingId]);
     if (listingRes.rows.length === 0) return res.status(404).json({ error: 'Listing not found.' });
     if (listingRes.rows[0].user_id !== userId) return res.status(403).json({ error: 'Not your listing.' });
@@ -260,7 +272,6 @@ app.put('/api/listings/:id', upload.fields([{ name: 'photos', maxCount: 10 }, { 
       return res.status(400).json({ error: 'Missing required fields.' });
     }
 
-    // Update core details
     await pool.query(`
       UPDATE listings SET
         make = $1, model = $2, year = $3, engine_cc = $4, mileage_km = $5, 
@@ -269,9 +280,7 @@ app.put('/api/listings/:id', upload.fields([{ name: 'photos', maxCount: 10 }, { 
       WHERE id = $13
     `, [make, model, year || null, engine_cc || null, mileage_km || null, price_kes, condition, intended_use || null, location_town, location_county || null, description || null, logbook_status || null, listingId]);
 
-    // Upload new photos if provided
     if (req.files && req.files.photos && req.files.photos.length > 0) {
-      // Get current max sort_order
       const maxOrderRes = await pool.query('SELECT MAX(sort_order) as max FROM listing_images WHERE listing_id = $1', [listingId]);
       let startOrder = (maxOrderRes.rows[0].max || 0) + 1;
 
@@ -285,7 +294,6 @@ app.put('/api/listings/:id', upload.fields([{ name: 'photos', maxCount: 10 }, { 
       }
     }
 
-    // Upload new documents if provided
     if (req.files && req.files.documents && req.files.documents.length > 0) {
       for (const file of req.files.documents) {
         const fileExt = file.originalname.split('.').pop();
