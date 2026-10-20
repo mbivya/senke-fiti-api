@@ -97,7 +97,6 @@ async function initMobileMenu() {
 
   const user = await getMe();
 
-  // Build menu contents
   const mLogin    = menu.querySelector('#m-login');
   const mSignup   = menu.querySelector('#m-signup');
   const mDash     = menu.querySelector('#m-dashboard');
@@ -126,25 +125,21 @@ async function initMobileMenu() {
     mLogout?.classList.add('hidden');
   }
 
-  // Toggle menu
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
     menu.classList.toggle('open');
   });
 
-  // Close on outside click
   document.addEventListener('click', (e) => {
     if (!menu.contains(e.target) && e.target !== btn) {
       menu.classList.remove('open');
     }
   });
 
-  // Close when a link is clicked
   menu.querySelectorAll('a').forEach(a => {
     a.addEventListener('click', () => menu.classList.remove('open'));
   });
 
-  // Logout from menu
   mLogout?.addEventListener('click', async () => {
     await fetch('/api/logout', { method: 'POST' });
     window.location.href = '/';
@@ -411,14 +406,37 @@ function renderListingDetail(l) {
 
   const images = l.images || [];
   const heroImg = images[0]
-    ? `<img id="detail-hero" src="${images[0].r2_key}" alt="">`
+    ? `<img id="detail-hero" src="${images[0].r2_key}" alt="" oncontextmenu="return false;" draggable="false">`
     : `<div class="placeholder" style="aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;color:#999">No photo</div>`;
 
   const thumbs = images.length > 1
     ? `<div class="detail-thumbs">${images.map((img, i) =>
-        `<img src="${img.r2_key}" data-full="${img.r2_key}" class="${i === 0 ? 'active' : ''}">`
+        `<img src="${img.r2_key}" data-full="${img.r2_key}" class="${i === 0 ? 'active' : ''}" oncontextmenu="return false;" draggable="false">`
       ).join('')}</div>`
     : '';
+
+  // --- PDF VIEWING LOGIC ---
+  let docHtml = '';
+  if (l.documents && l.documents.length > 0) {
+    docHtml = `<div class="detail-description" style="margin-top:16px">
+      <h3 style="margin-bottom:10px;font-size:15px">Documents</h3>
+      <ul style="list-style:none;padding:0;">`;
+    l.documents.forEach(doc => {
+      const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(doc.r2_key)}&embedded=true`;
+      docHtml += `
+        <li style="margin-bottom:10px;">
+          <button class="btn-secondary" onclick="document.getElementById('pdf-viewer').classList.toggle('hidden'); document.getElementById('pdf-frame').src='${viewerUrl}';">
+            📄 View ${escapeHtml(doc.doc_type)}
+          </button>
+        </li>
+      `;
+    });
+    docHtml += `</ul>
+      <div id="pdf-viewer" class="hidden" style="margin-top:10px; height: 500px;">
+         <iframe id="pdf-frame" src="" style="width:100%; height:100%; border:1px solid #ccc;"></iframe>
+      </div>
+    </div>`;
+  }
 
   const phone = l.seller_phone ? l.seller_phone.replace(/^254/, '0') : '';
   const waLink = l.seller_phone
@@ -442,6 +460,8 @@ function renderListingDetail(l) {
           <h3 style="margin-bottom:10px;font-size:15px">Description</h3>
           <p>${escapeHtml(l.description).replace(/\n/g, '<br>')}</p>
         </div>` : ''}
+
+        ${docHtml}
       </div>
 
       <div class="detail-info">
@@ -558,6 +578,7 @@ async function loadDashboardListings() {
       if (l.status === 'draft') {
         actions = `
           <button class="btn-primary btn-sm" data-action="pay" data-id="${l.id}">Pay KSh 300</button>
+          <a class="btn-secondary btn-sm" href="/listing.html?id=${encodeURIComponent(l.id)}">Preview</a>
           <a class="btn-secondary btn-sm" href="/upload.html?edit=${encodeURIComponent(l.id)}">Edit</a>
           <button class="btn-danger btn-sm" data-action="delete" data-id="${l.id}">Delete</button>
         `;
@@ -815,17 +836,34 @@ async function loadAllListings(q = '') {
     const data = await res.json();
     const items = data.listings || [];
     if (items.length === 0) { container.innerHTML = '<p class="loading">No listings found.</p>'; return; }
-    container.innerHTML = items.map(l => `
-      <div class="admin-item">
-        <div>
-          <strong>${escapeHtml(l.make)} ${escapeHtml(l.model)}</strong> — ${formatKes(l.price_kes)}<br>
-          <small style="color:#777">${escapeHtml(l.seller_name)} · ${escapeHtml(l.seller_phone || '')} · <span class="status-badge status-${l.status}">${l.status}</span></small>
+    
+    container.innerHTML = items.map(l => {
+      const approveBtn = l.status === 'draft' 
+        ? `<button class="btn-primary btn-sm" data-action="approve" data-id="${l.id}">Approve</button>` 
+        : '';
+
+      return `
+        <div class="admin-item">
+          <div>
+            <strong>${escapeHtml(l.make)} ${escapeHtml(l.model)}</strong> — ${formatKes(l.price_kes)}<br>
+            <small style="color:#777">${escapeHtml(l.seller_name)} · ${escapeHtml(l.seller_phone || '')} · <span class="status-badge status-${l.status}">${l.status}</span></small>
+          </div>
+          <div class="admin-item-actions">
+            ${approveBtn}
+            <a href="/listing.html?id=${encodeURIComponent(l.id)}" target="_blank" class="btn-secondary btn-sm">View</a>
+          </div>
         </div>
-        <div class="admin-item-actions">
-          <a href="/listing.html?id=${encodeURIComponent(l.id)}" target="_blank" class="btn-secondary btn-sm">View</a>
-        </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
+
+    container.querySelectorAll('button[data-action="approve"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Approve this listing and make it active?')) return;
+        await fetch(`/api/admin/listings/${btn.dataset.id}/approve`, { method: 'POST' });
+        loadAllListings(q); 
+      });
+    });
+
   } catch { container.innerHTML = '<p class="loading">Could not load listings.</p>'; }
 }
 

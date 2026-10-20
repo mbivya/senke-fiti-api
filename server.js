@@ -7,8 +7,9 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import { createClient } from '@supabase/supabase-js';
 
+// Import activateListing from listings.js
+import { searchListings, getUserListings, getListing, activateListing } from './src/listings.js';
 import { hashPassword, verifyPassword, generateId, normalizePhone, getCookie, buildSessionCookie, buildLogoutCookie } from './src/auth.js';
-import { searchListings, getUserListings, getListing } from './src/listings.js';
 import { initiateStkPush, verifyWebhookSignature } from './src/payments.js';
 import { 
   listReports, listVerifications, approveVerification, rejectVerification, 
@@ -30,7 +31,6 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Use the official Supabase client
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -152,10 +152,25 @@ app.get('/api/listings/mine', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// SECURED GET LISTING ROUTE
 app.get('/api/listings/:id', async (req, res) => {
   try {
     const listing = await getListing(pool, req.params.id);
     if (!listing) return res.status(404).json({ error: 'Listing not found.' });
+
+    if (listing.status !== 'active') {
+      const token = getCookie(req.headers.cookie, 'session');
+      if (!token) return res.status(403).json({ error: 'This listing is not public yet.' });
+      
+      const userRes = await pool.query('SELECT user_id FROM sessions WHERE token = $1', [token]);
+      if (userRes.rows.length === 0) return res.status(403).json({ error: 'This listing is not public yet.' });
+      
+      const userId = userRes.rows[0].user_id;
+      if (listing.user_id !== userId) {
+         return res.status(403).json({ error: 'This listing is not public yet.' });
+      }
+    }
+
     res.json({ listing });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -345,6 +360,14 @@ app.get('/api/admin/listings', async (req, res) => {
   try {
     const listings = req.query.q ? await searchListingsAdmin(pool, req.query.q) : await listAllListings(pool);
     res.json({ listings });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// NEW ROUTE: Approve Listing (Bypass Payment)
+app.post('/api/admin/listings/:id/approve', async (req, res) => {
+  try {
+    await activateListing(pool, req.params.id, 12);
+    res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

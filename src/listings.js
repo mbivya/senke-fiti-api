@@ -3,7 +3,7 @@
 // Helper to generate the public URL for Supabase Storage
 const getPublicUrl = (key) => {
   if (!key) return null;
-  // If the key is already a full URL (e.g. from an old upload), just return it
+  // If the key is already a full URL, just return it
   if (key.startsWith('http')) return key;
   return `${process.env.SUPABASE_URL}/storage/v1/object/public/senke-fiti/${key}`;
 };
@@ -53,7 +53,6 @@ export async function searchListings(pool, params) {
 
   const result = await pool.query(query, values);
   
-  // Convert the database key to a full public URL
   return result.rows.map(row => ({
     ...row,
     cover_key: getPublicUrl(row.cover_key)
@@ -98,11 +97,23 @@ export async function getListing(pool, listingId) {
     [listingId]
   );
 
-  // Convert image keys to full URLs for the detail page
   const images = imagesRes.rows.map(img => ({
     ...img,
     r2_key: getPublicUrl(img.r2_key)
   }));
 
   return { ...listing, images, documents: docsRes.rows };
+}
+
+// Used by Admin to bypass payment
+export async function activateListing(pool, listingId, months = 12) {
+  const days = months * 30;
+  await pool.query(
+    `UPDATE listings SET
+      status = 'active',
+      is_paid = true,
+      expires_at = now() + ($1 || ' days')::interval,
+      updated_at = now()
+     WHERE id = $2`
+  , [days, listingId]);
 }
