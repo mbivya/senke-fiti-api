@@ -442,7 +442,7 @@ app.post('/api/payments/initiate', async (req, res) => {
     const amount = PRICES[purpose];
     if (!amount) return res.status(400).json({ error: 'Unknown purpose.' });
 
-    const callbackUrl = `${req.protocol}://${req.get('host')}/api/payments/webhook`;
+    const callbackUrl = `https://${req.get('host')}/api/payments/webhook`;
     const firstName = user.full_name ? user.full_name.split(' ')[0] : 'Senke';
     const lastName = user.full_name && user.full_name.split(' ').length > 1 ? user.full_name.split(' ')[1] : 'Fiti';
 
