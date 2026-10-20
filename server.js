@@ -200,17 +200,33 @@ app.post('/api/listings/:id/delete', async (req, res) => {
     const userRes = await pool.query('SELECT user_id FROM sessions WHERE token = $1', [token]);
     if (userRes.rows.length === 0) return res.status(401).json({ error: 'Invalid session' });
     const userId = userRes.rows[0].user_id;
-
     const listingId = req.params.id;
 
     const listingRes = await pool.query('SELECT user_id FROM listings WHERE id = $1', [listingId]);
     if (listingRes.rows.length === 0) return res.status(404).json({ error: 'Listing not found.' });
     if (listingRes.rows[0].user_id !== userId) return res.status(403).json({ error: 'Not your listing.' });
 
+    // 1. Get all file paths to delete from Supabase Storage
+    const imagesRes = await pool.query('SELECT r2_key FROM listing_images WHERE listing_id = $1', [listingId]);
+    const docsRes = await pool.query('SELECT r2_key FROM listing_documents WHERE listing_id = $1', [listingId]);
+    
+    const filesToDelete = [
+      ...imagesRes.rows.map(r => r.r2_key),
+      ...docsRes.rows.map(r => r.r2_key)
+    ];
+
+    // 2. Delete files from Supabase Storage
+    if (filesToDelete.length > 0) {
+      const { error } = await supabase.storage.from('senke-fiti').remove(filesToDelete);
+      if (error) console.error('Error deleting files from Supabase:', error.message);
+    }
+
+    // 3. Delete the listing (this cascades to delete images/docs from the DB)
     await pool.query('DELETE FROM listings WHERE id = $1', [listingId]);
 
     res.json({ ok: true });
   } catch (err) {
+    console.error('Delete error:', err);
     res.status(500).json({ error: err.message });
   }
 });
