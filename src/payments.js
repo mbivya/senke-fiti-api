@@ -56,7 +56,7 @@ async function getAccessToken() {
 export async function initiateStkPush({ phone, amount, callbackUrl, metadata }) {
   const token = await getAccessToken();
 
-  // We use the raw till number from your .env (e.g., 8718324)
+  // THE FIX: callback_url must be nested inside _links
   const body = {
     payment_channel: 'M-PESA STK Push',
     till_number: process.env.KOPOKOPO_TILL, 
@@ -69,7 +69,9 @@ export async function initiateStkPush({ phone, amount, callbackUrl, metadata }) 
       currency: 'KES',
       value: amount
     },
-    callback_url: callbackUrl,
+    _links: {
+      callback_url: callbackUrl
+    },
     metadata: {
       listing_id: metadata.listing_id,
       purpose: metadata.purpose
@@ -92,7 +94,6 @@ export async function initiateStkPush({ phone, amount, callbackUrl, metadata }) 
       throw new Error("A payment request is already pending for this phone number. Please wait a moment and try again.");
     }
     
-    // THIS IS THE CRITICAL LOGGING WE ADDED
     console.error("=== RAW KOPOKOPO STK ERROR ===");
     console.error(text);
     console.error("==============================");
