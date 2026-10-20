@@ -524,6 +524,8 @@ function specRow(label, value) {
 
 // ---------- DASHBOARD ----------
 
+let currentDashboardTab = 'all';
+
 async function initDashboard() {
   const guest = document.getElementById('dashboard-guest');
   const content = document.getElementById('dashboard-content');
@@ -536,6 +538,29 @@ async function initDashboard() {
     document.getElementById('verify-banner').classList.remove('hidden');
   }
 
+  // Add tabs to the dashboard header
+  const header = document.querySelector('.dashboard-header');
+  const tabContainer = document.createElement('div');
+  tabContainer.className = 'admin-tabs';
+  tabContainer.style.marginTop = '20px';
+  tabContainer.style.width = '100%';
+  tabContainer.innerHTML = `
+    <button class="admin-tab active" data-dash-tab="all">All Listings</button>
+    <button class="admin-tab" data-dash-tab="active">Active</button>
+    <button class="admin-tab" data-dash-tab="draft">Drafts</button>
+    <button class="admin-tab" data-dash-tab="expired">Expired</button>
+  `;
+  header.parentNode.insertBefore(tabContainer, header.nextSibling);
+
+  tabContainer.querySelectorAll('.admin-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabContainer.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      currentDashboardTab = tab.dataset.dashTab;
+      loadDashboardListings();
+    });
+  });
+
   loadDashboardListings();
 }
 
@@ -546,7 +571,7 @@ async function loadDashboardListings() {
   try {
     const res = await fetch('/api/listings/mine');
     const data = await res.json();
-    const listings = data.listings || [];
+    let listings = data.listings || [];
 
     const counts = { active: 0, draft: 0, expired: 0, hidden: 0 };
     listings.forEach(l => { if (counts[l.status] !== undefined) counts[l.status]++; });
@@ -568,7 +593,32 @@ async function loadDashboardListings() {
       return;
     }
 
-    container.innerHTML = listings.map(l => {
+    // Filter based on tab
+    let filteredListings = listings;
+    if (currentDashboardTab === 'active') filteredListings = listings.filter(l => l.status === 'active');
+    else if (currentDashboardTab === 'draft') filteredListings = listings.filter(l => l.status === 'draft');
+    else if (currentDashboardTab === 'expired') filteredListings = listings.filter(l => l.status === 'expired');
+
+    // ADDED: Warning message for drafts
+    let draftWarning = '';
+    if (currentDashboardTab === 'draft' && counts.draft > 0) {
+      draftWarning = `
+        <div class="verify-banner" style="background:#ffe6e6; border-color:#ffcccc; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; grid-column: 1 / -1;">
+          <div>
+            <strong style="color:#c02020;">Attention: You have ${counts.draft} unpaid draft(s).</strong>
+            <p style="margin:4px 0 0 0; font-size:13px; color:#a00;">Drafts exceeding 60 days will be automatically deleted.</p>
+          </div>
+          <button class="btn-danger btn-sm" onclick="deleteAllDrafts()">Delete All Drafts</button>
+        </div>
+      `;
+    }
+
+    if (filteredListings.length === 0) {
+       container.innerHTML = draftWarning + '<p class="empty" style="grid-column: 1 / -1;">No listings found in this category.</p>';
+       return;
+    }
+
+    container.innerHTML = draftWarning + filteredListings.map(l => {
       const cover = l.cover_key
         ? `<img src="${l.cover_key}" alt="" loading="lazy">`
         : `<div class="placeholder">No photo</div>`;
@@ -625,6 +675,21 @@ async function loadDashboardListings() {
     container.innerHTML = '<p class="empty">Could not load listings. ' + escapeHtml(err.message) + '</p>';
   }
 }
+
+// ADDED: Function for bulk deleting drafts
+window.deleteAllDrafts = async function() {
+  if (!confirm('Are you sure you want to delete ALL your draft listings? This cannot be undone.')) return;
+  try {
+    const res = await fetch('/api/listings/delete-drafts', { method: 'POST' });
+    if (res.ok) {
+      loadDashboardListings();
+    } else {
+      alert('Could not delete drafts.');
+    }
+  } catch {
+    alert('Network error.');
+  }
+};
 
 async function handleDashboardAction(action, id) {
   if (action === 'delete') {
