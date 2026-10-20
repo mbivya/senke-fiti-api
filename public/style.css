@@ -107,7 +107,6 @@ img { display: block; max-width: 100%; }
 
 .btn-link:hover { border-color: var(--orange); color: var(--orange); }
 
-/* Hamburger — hidden on desktop */
 .hamburger {
   display: none;
   background: none;
@@ -125,7 +124,6 @@ img { display: block; max-width: 100%; }
 
 .hamburger:hover { border-color: var(--orange); color: var(--orange); }
 
-/* Mobile dropdown */
 .mobile-menu {
   display: none;
   position: absolute;
@@ -157,11 +155,7 @@ img { display: block; max-width: 100%; }
 .mobile-menu a:hover,
 .mobile-menu button:hover { background: #222; color: var(--orange); }
 
-.mobile-menu .divider {
-  height: 1px;
-  background: #222;
-  margin: 6px 0;
-}
+.mobile-menu .divider { height: 1px; background: #222; margin: 6px 0; }
 
 /* ---------- HERO ---------- */
 

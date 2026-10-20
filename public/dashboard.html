@@ -51,6 +51,14 @@
       <a href="/upload.html" class="btn-primary">+ Post a new bike</a>
     </div>
 
+    <!-- The static tabs -->
+    <div class="admin-tabs" id="dashboard-tabs" style="margin-bottom: 24px; width: 100%;">
+      <button class="admin-tab active" data-dash-tab="all">All Listings</button>
+      <button class="admin-tab" data-dash-tab="active">Active</button>
+      <button class="admin-tab" data-dash-tab="draft">Drafts</button>
+      <button class="admin-tab" data-dash-tab="expired">Expired</button>
+    </div>
+
     <div id="dashboard-guest" class="admin-denied hidden">
       <p>Please log in to see your listings.</p>
       <a href="/login.html" class="btn-primary">Log in</a>
@@ -66,6 +74,10 @@
       </div>
 
       <div class="dashboard-stats" id="dashboard-stats"></div>
+      
+      <!-- The draft warning banner will be injected here by app.js -->
+      <div id="dashboard-warning-container"></div>
+
       <div id="dashboard-listings" class="dashboard-listings">
         <p class="loading">Loading your listings...</p>
       </div>

@@ -538,28 +538,18 @@ async function initDashboard() {
     document.getElementById('verify-banner').classList.remove('hidden');
   }
 
-  // Add tabs to the dashboard header
-  const header = document.querySelector('.dashboard-header');
-  const tabContainer = document.createElement('div');
-  tabContainer.className = 'admin-tabs';
-  tabContainer.style.marginTop = '20px';
-  tabContainer.style.width = '100%';
-  tabContainer.innerHTML = `
-    <button class="admin-tab active" data-dash-tab="all">All Listings</button>
-    <button class="admin-tab" data-dash-tab="active">Active</button>
-    <button class="admin-tab" data-dash-tab="draft">Drafts</button>
-    <button class="admin-tab" data-dash-tab="expired">Expired</button>
-  `;
-  header.parentNode.insertBefore(tabContainer, header.nextSibling);
-
-  tabContainer.querySelectorAll('.admin-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      tabContainer.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      currentDashboardTab = tab.dataset.dashTab;
-      loadDashboardListings();
+  // Listen to the static tabs we added to dashboard.html
+  const tabContainer = document.getElementById('dashboard-tabs');
+  if (tabContainer) {
+    tabContainer.querySelectorAll('.admin-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabContainer.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        currentDashboardTab = tab.dataset.dashTab;
+        loadDashboardListings();
+      });
     });
-  });
+  }
 
   loadDashboardListings();
 }
@@ -567,6 +557,7 @@ async function initDashboard() {
 async function loadDashboardListings() {
   const container = document.getElementById('dashboard-listings');
   const stats = document.getElementById('dashboard-stats');
+  const warningContainer = document.getElementById('dashboard-warning-container');
 
   try {
     const res = await fetch('/api/listings/mine');
@@ -590,6 +581,7 @@ async function loadDashboardListings() {
           <a href="/upload.html" class="btn-primary">Post your first bike</a>
         </div>
       `;
+      if(warningContainer) warningContainer.innerHTML = '';
       return;
     }
 
@@ -600,10 +592,9 @@ async function loadDashboardListings() {
     else if (currentDashboardTab === 'expired') filteredListings = listings.filter(l => l.status === 'expired');
 
     // ADDED: Warning message for drafts
-    let draftWarning = '';
-    if (currentDashboardTab === 'draft' && counts.draft > 0) {
-      draftWarning = `
-        <div class="verify-banner" style="background:#ffe6e6; border-color:#ffcccc; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; grid-column: 1 / -1;">
+    if (currentDashboardTab === 'draft' && counts.draft > 0 && warningContainer) {
+      warningContainer.innerHTML = `
+        <div class="verify-banner" style="background:#ffe6e6; border-color:#ffcccc; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
           <div>
             <strong style="color:#c02020;">Attention: You have ${counts.draft} unpaid draft(s).</strong>
             <p style="margin:4px 0 0 0; font-size:13px; color:#a00;">Drafts exceeding 60 days will be automatically deleted.</p>
@@ -611,14 +602,16 @@ async function loadDashboardListings() {
           <button class="btn-danger btn-sm" onclick="deleteAllDrafts()">Delete All Drafts</button>
         </div>
       `;
+    } else if (warningContainer) {
+      warningContainer.innerHTML = '';
     }
 
     if (filteredListings.length === 0) {
-       container.innerHTML = draftWarning + '<p class="empty" style="grid-column: 1 / -1;">No listings found in this category.</p>';
+       container.innerHTML = '<p class="empty" style="grid-column: 1 / -1;">No listings found in this category.</p>';
        return;
     }
 
-    container.innerHTML = draftWarning + filteredListings.map(l => {
+    container.innerHTML = filteredListings.map(l => {
       const cover = l.cover_key
         ? `<img src="${l.cover_key}" alt="" loading="lazy">`
         : `<div class="placeholder">No photo</div>`;
@@ -902,10 +895,12 @@ async function loadAllListings(q = '') {
     if (items.length === 0) { container.innerHTML = '<p class="loading">No listings found.</p>'; return; }
     
     container.innerHTML = items.map(l => {
-      const approveBtn = l.status === 'draft' 
+      // Show Approve for Drafts or Hidden (suspended) listings
+      const approveBtn = (l.status === 'draft' || l.status === 'hidden')
         ? `<button class="btn-primary btn-sm" data-action="approve" data-id="${l.id}">Approve</button>` 
         : '';
         
+      // Show Suspend only for Active listings
       const suspendBtn = l.status === 'active'
         ? `<button class="danger btn-sm" data-action="suspend" data-id="${l.id}">Suspend</button>`
         : '';
