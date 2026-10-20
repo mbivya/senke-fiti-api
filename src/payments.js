@@ -30,6 +30,9 @@ async function getAccessToken() {
 
   const text = await res.text();
   if (!res.ok) {
+    console.error("=== AUTH ERROR RAW ===");
+    console.error(text);
+    console.error("======================");
     throw new Error(`KopoKopo auth failed (${res.status}): ${text.slice(0, 400)}`);
   }
 
@@ -43,7 +46,7 @@ async function getAccessToken() {
   }
 
   cachedToken = data.access_token;
-  cachedTokenExpiry = now + 50 * 60 * 1000; // Cache for 50 minutes
+  cachedTokenExpiry = now + 50 * 60 * 1000;
 
   return cachedToken;
 }
@@ -53,7 +56,6 @@ async function getAccessToken() {
 export async function initiateStkPush({ phone, amount, callbackUrl, metadata }) {
   const token = await getAccessToken();
 
-  // We use the raw till number from your .env (e.g., 8718324)
   const body = {
     payment_channel: 'M-PESA STK Push',
     till_number: process.env.KOPOKOPO_TILL, 
@@ -88,6 +90,12 @@ export async function initiateStkPush({ phone, amount, callbackUrl, metadata }) 
     if (res.status === 429) {
       throw new Error("A payment request is already pending for this phone number. Please wait a moment and try again.");
     }
+    
+    // THIS IS THE CRITICAL LOGGING
+    console.error("=== RAW KOPOKOPO STK ERROR ===");
+    console.error(text);
+    console.error("==============================");
+
     let detail = text;
     try {
       const parsed = JSON.parse(text);
@@ -114,7 +122,6 @@ export async function verifyWebhookSignature(rawBody, signatureHeader) {
   const [algo, providedHex] = signatureHeader.split('=');
   if (!algo || !providedHex) return false;
 
-  // KopoKopo uses the client_secret as the HMAC key
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(process.env.KOPOKOPO_CLIENT_SECRET),
