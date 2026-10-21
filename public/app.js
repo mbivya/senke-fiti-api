@@ -15,30 +15,12 @@ document.addEventListener('DOMContentLoaded', () => {
   if (document.getElementById('verify-form'))       initVerifyPage();
 });
 
-// ---------- SHARED ----------
-function initYear() {
-  const y = document.getElementById('year');
-  if (y) y.textContent = new Date().getFullYear();
-}
-
-function initFooterSocial() {
-  const wa = document.getElementById('wa-contact');
-  if (wa) wa.href = 'https://wa.me/254700000000';
-}
-
-function escapeHtml(str) {
-  return String(str ?? '').replace(/[&<>"']/g, c => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
-}
-
-function formatKes(n) {
-  return 'KSh ' + Number(n).toLocaleString('en-KE');
-}
-
-function capitalize(s) {
-  return String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
-}
+// --- SHARED UTILITIES ---
+function initYear() { const y = document.getElementById('year'); if (y) y.textContent = new Date().getFullYear(); }
+function initFooterSocial() { const wa = document.getElementById('wa-contact'); if (wa) wa.href = 'https://wa.me/254700000000'; }
+function escapeHtml(str) { return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function formatKes(n) { return 'KSh ' + Number(n).toLocaleString('en-KE'); }
+function capitalize(s) { return String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1); }
 
 async function getMe() {
   try {
@@ -49,6 +31,7 @@ async function getMe() {
   } catch { return null; }
 }
 
+// --- NAVIGATION & HEADER ---
 async function initNav() {
   const userSpan = document.getElementById('nav-user');
   if (!userSpan) return;
@@ -74,6 +57,25 @@ async function initNav() {
     } else {
       adminLink?.classList.add('hidden');
     }
+
+    // ADD BELL ICON
+    const nav = document.getElementById('nav');
+    if (nav && !document.getElementById('nav-bell')) {
+      const bell = document.createElement('a');
+      bell.href = '/dashboard.html';
+      bell.id = 'nav-bell';
+      bell.style = 'color:white; cursor:pointer; margin-left:10px; position:relative; text-decoration:none; font-size:18px;';
+      bell.innerHTML = '🔔 <span id="bell-dot" class="hidden" style="position:absolute; top:0; right:-2px; width:8px; height:8px; background:red; border-radius:50%;"></span>';
+      nav.appendChild(bell);
+      
+      fetch('/api/notifications').then(r => r.json()).then(data => {
+        const notifs = data.notifications || [];
+        if (notifs.length > 0 && notifs[0].is_read === false) {
+          document.getElementById('bell-dot').classList.remove('hidden');
+        }
+      }).catch(() => {});
+    }
+
   } else {
     dashLink?.classList.add('hidden');
     adminLink?.classList.add('hidden');
@@ -85,7 +87,6 @@ async function initNav() {
   });
 }
 
-// ---------- MOBILE MENU ----------
 async function initMobileMenu() {
   const btn = document.getElementById('hamburger');
   const menu = document.getElementById('mobile-menu');
@@ -142,7 +143,7 @@ async function initMobileMenu() {
   });
 }
 
-// ---------- LOGIN PAGE ----------
+// --- LOGIN PAGE ---
 function initLoginPage() {
   const tabs = document.querySelectorAll('.tab');
   const loginForm = document.getElementById('login-form');
@@ -209,7 +210,7 @@ function initLoginPage() {
   });
 }
 
-// ---------- UPLOAD / EDIT FORM ----------
+// --- UPLOAD / EDIT FORM ---
 let editingListingId = null;
 
 function initListingForm() {
@@ -270,16 +271,11 @@ async function loadListingForEdit(id) {
   } catch {}
 }
 
-// ---------- HOMEPAGE SEARCH ----------
-const state = {
-  q: '', make: '', model: '', condition: '', town: '',
-  price_min: '', price_max: '', cc_min: '', cc_max: '',
-  use: '', sort: 'newest'
-};
+// --- HOMEPAGE SEARCH ---
+const state = { q: '', make: '', model: '', condition: '', town: '', price_min: '', price_max: '', cc_min: '', cc_max: '', use: '', sort: 'newest' };
 
 function initHome() {
   const params = new URLSearchParams(window.location.search);
-
   ['q','make','model','condition','town','price_min','price_max','cc_min','cc_max','use','sort'].forEach(k => {
     if (params.get(k)) state[k] = params.get(k);
   });
@@ -379,7 +375,7 @@ function renderListings(listings) {
   }).join('');
 }
 
-// ---------- LISTING DETAIL ----------
+// --- LISTING DETAIL ---
 function initListingDetail() {
   const params = new URLSearchParams(window.location.search);
   const id = params.get('id');
@@ -516,7 +512,7 @@ function specRow(label, value) {
   return `<div class="spec-row"><span>${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`;
 }
 
-// ---------- DASHBOARD ----------
+// --- DASHBOARD ---
 let currentDashboardTab = 'all';
 
 async function initDashboard() {
@@ -530,6 +526,16 @@ async function initDashboard() {
   if (!user.is_verified) {
     document.getElementById('verify-banner').classList.remove('hidden');
   }
+
+  // Show notifications
+  try {
+    const res = await fetch('/api/notifications');
+    const data = await res.json();
+    const notifs = data.notifications || [];
+    if (notifs.length > 0 && notifs[0].is_read === false) {
+      alert(`SYSTEM NOTIFICATION:\n\n${notifs[0].title}\n${notifs[0].message}`);
+    }
+  } catch {}
 
   const tabContainer = document.getElementById('dashboard-tabs');
   if (tabContainer) {
@@ -556,8 +562,11 @@ async function loadDashboardListings() {
     const data = await res.json();
     let listings = data.listings || [];
 
-    const counts = { active: 0, draft: 0, expired: 0, hidden: 0 };
-    listings.forEach(l => { if (counts[l.status] !== undefined) counts[l.status]++; });
+    const counts = { active: 0, draft: 0, expired: 0, hidden: 0, featured: 0 };
+    listings.forEach(l => { 
+      if (counts[l.status] !== undefined) counts[l.status]++; 
+      if (l.is_featured) counts.featured++;
+    });
 
     stats.innerHTML = `
       <div class="stat-card"><div class="stat-num">${listings.length}</div><div class="stat-label">Total</div></div>
@@ -579,8 +588,9 @@ async function loadDashboardListings() {
 
     let filteredListings = listings;
     if (currentDashboardTab === 'active') filteredListings = listings.filter(l => l.status === 'active');
+    else if (currentDashboardTab === 'featured') filteredListings = listings.filter(l => l.is_featured);
     else if (currentDashboardTab === 'draft') filteredListings = listings.filter(l => l.status === 'draft');
-    else if (currentDashboardTab === 'expired') filteredListings = listings.filter(l => l.status === 'expired');
+    else if (currentDashboardTab === 'hidden') filteredListings = listings.filter(l => l.status === 'hidden');
 
     if (currentDashboardTab === 'draft' && counts.draft > 0 && warningContainer) {
       warningContainer.innerHTML = `
@@ -614,7 +624,7 @@ async function loadDashboardListings() {
           <a class="btn-secondary btn-sm" href="/upload.html?edit=${encodeURIComponent(l.id)}">Edit</a>
           <button class="btn-danger btn-sm" data-action="delete" data-id="${l.id}">Delete</button>
         `;
-      } else if (l.status === 'active') {
+      } else if (l.status === 'active' || l.status === 'hidden') {
         actions = `
           <button class="btn-secondary btn-sm" data-action="feature" data-id="${l.id}">Boost — KSh 1,000</button>
           <a class="btn-secondary btn-sm" href="/listing.html?id=${encodeURIComponent(l.id)}">View</a>
@@ -627,14 +637,10 @@ async function loadDashboardListings() {
           <a class="btn-secondary btn-sm" href="/upload.html?edit=${encodeURIComponent(l.id)}">Edit</a>
           <button class="btn-danger btn-sm" data-action="delete" data-id="${l.id}">Delete</button>
         `;
-      } else {
-        actions = `
-          <a class="btn-secondary btn-sm" href="/listing.html?id=${encodeURIComponent(l.id)}">View</a>
-          <button class="btn-danger btn-sm" data-action="delete" data-id="${l.id}">Delete</button>
-        `;
       }
 
       const verifiedTag = l.seller_verified ? '<span class="card-tag verified">Verified</span>' : '';
+      const hiddenNote = l.status === 'hidden' ? '<p style="color:var(--red); font-size:12px; margin-top:4px;">Suspended by Admin. Contact support.</p>' : '';
 
       return `
         <div class="dash-card">
@@ -648,6 +654,7 @@ async function loadDashboardListings() {
               ${l.is_featured ? '<span class="card-tag featured">★ Featured</span>' : ''}
               ${verifiedTag}
             </div>
+            ${hiddenNote}
             <div class="dash-card-actions">${actions}</div>
           </div>
         </div>
@@ -761,7 +768,7 @@ async function handleDashboardAction(action, id) {
   }
 }
 
-// ---------- VERIFY PAGE ----------
+// --- VERIFY PAGE ---
 async function initVerifyPage() {
   const guest = document.getElementById('verify-guest');
   const already = document.getElementById('verify-already');
@@ -809,7 +816,7 @@ async function initVerifyPage() {
   });
 }
 
-// ---------- ADMIN ----------
+// --- ADMIN PANEL ---
 function initAdmin() {
   const denied = document.getElementById('admin-denied');
   const content = document.getElementById('admin-content');
@@ -828,7 +835,33 @@ function initAdmin() {
     loadAllListings();
     loadAllUsers();
 
+    // Add tabs for Admin Listings
+    const adminListingsSection = document.getElementById('admin-listings');
+    const listContainer = document.getElementById('all-listings');
+    
+    if (!document.getElementById('admin-listings-tabs')) {
+      const tabsHtml = `
+        <div class="admin-tabs" id="admin-listings-tabs" style="margin-bottom:16px;">
+          <button class="admin-tab active" data-admin-tab="all">All</button>
+          <button class="admin-tab" data-admin-tab="active">Active</button>
+          <button class="admin-tab" data-admin-tab="featured">Featured</button>
+          <button class="admin-tab" data-admin-tab="draft">Drafts</button>
+          <button class="admin-tab" data-admin-tab="hidden">Suspended</button>
+        </div>
+      `;
+      listContainer.parentNode.insertBefore(document.createRange().createContextualFragment(tabsHtml), listContainer);
+      
+      document.querySelectorAll('#admin-listings-tabs .admin-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          document.querySelectorAll('#admin-listings-tabs .admin-tab').forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          loadAllListings('', tab.dataset.adminTab);
+        });
+      });
+    }
+
     document.querySelectorAll('.admin-tab').forEach(tab => {
+      if (tab.closest('#admin-listings-tabs')) return;
       tab.addEventListener('click', () => {
         document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
@@ -843,7 +876,8 @@ function initAdmin() {
     let listingsTimer, usersTimer;
     searchListings?.addEventListener('input', () => {
       clearTimeout(listingsTimer);
-      listingsTimer = setTimeout(() => loadAllListings(searchListings.value.trim()), 250);
+      const activeTab = document.querySelector('#admin-listings-tabs .admin-tab.active')?.dataset.adminTab || 'all';
+      listingsTimer = setTimeout(() => loadAllListings(searchListings.value.trim(), activeTab), 250);
     });
     searchUsers?.addEventListener('input', () => {
       clearTimeout(usersTimer);
@@ -911,14 +945,20 @@ async function loadVerifications() {
   } catch { container.innerHTML = '<p class="loading">Could not load verifications.</p>'; }
 }
 
-async function loadAllListings(q = '') {
+async function loadAllListings(q = '', filter = 'all') {
   const container = document.getElementById('all-listings');
   container.innerHTML = '<p class="loading">Loading listings...</p>';
   try {
     const url = '/api/admin/listings' + (q ? '?q=' + encodeURIComponent(q) : '');
     const res = await fetch(url);
     const data = await res.json();
-    const items = data.listings || [];
+    let items = data.listings || [];
+    
+    if (filter === 'active') items = items.filter(l => l.status === 'active');
+    else if (filter === 'featured') items = items.filter(l => l.is_featured);
+    else if (filter === 'draft') items = items.filter(l => l.status === 'draft');
+    else if (filter === 'hidden') items = items.filter(l => l.status === 'hidden');
+
     if (items.length === 0) { container.innerHTML = '<p class="loading">No listings found.</p>'; return; }
     
     container.innerHTML = items.map(l => {
@@ -930,15 +970,22 @@ async function loadAllListings(q = '') {
         ? `<button class="danger btn-sm" data-action="suspend" data-id="${l.id}">Suspend</button>`
         : '';
 
+      const deleteBtn = `<button class="danger btn-sm" data-action="delete" data-id="${l.id}">Delete</button>`;
+
       return `
         <div class="admin-item">
           <div>
             <strong>${escapeHtml(l.make)} ${escapeHtml(l.model)}</strong> — ${formatKes(l.price_kes)}<br>
-            <small style="color:#777">${escapeHtml(l.seller_name)} · ${escapeHtml(l.seller_phone || '')} · <span class="status-badge status-${l.status}">${l.status}</span> · ${l.is_featured ? '★ Featured' : ''}</small>
+            <small style="color:#777">
+              ${escapeHtml(l.seller_name)} · ${escapeHtml(l.seller_phone || '')} · 
+              <span class="status-badge status-${l.status}">${l.status}</span> 
+              ${l.is_featured ? '· <strong>★ Featured</strong>' : ''}
+            </small>
           </div>
           <div class="admin-item-actions">
             ${approveBtn}
             ${suspendBtn}
+            ${deleteBtn}
             <a href="/listing.html?id=${encodeURIComponent(l.id)}" target="_blank" class="btn-secondary btn-sm">View</a>
           </div>
         </div>
@@ -953,8 +1000,11 @@ async function loadAllListings(q = '') {
         } else if (btn.dataset.action === 'suspend') {
           if (!confirm('Suspend this listing? It will be hidden from the public.')) return;
           await fetch(`/api/admin/listings/${btn.dataset.id}/suspend`, { method: 'POST' });
+        } else if (btn.dataset.action === 'delete') {
+          if (!confirm('PERMANENTLY DELETE this listing? This will wipe all images and the listing data, but keep the payment history. This cannot be undone.')) return;
+          await fetch(`/api/admin/listings/${btn.dataset.id}/delete`, { method: 'POST' });
         }
-        loadAllListings(q); 
+        loadAllListings(q, filter); 
       });
     });
 

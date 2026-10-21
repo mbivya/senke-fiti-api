@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Receipt — Senke Fiti</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f5; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+    .receipt-page { background: white; width: 100%; max-width: 400px; padding: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; color: #000; }
+    .header { text-align: center; margin-bottom: 20px; }
+    .header h1 { font-size: 20px; margin: 0; }
+    .header p { font-size: 12px; color: #555; margin: 4px 0 0; }
+    .divider { border-top: 1px dashed #999; margin: 15px 0; }
+    .meta-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; }
+    .item-table { width: 100%; font-size: 12px; border-collapse: collapse; margin-top: 10px; }
+    .item-table th, .item-table td { text-align: left; padding: 6px 0; border-bottom: 1px solid #eee; }
+    .item-table th { font-weight: 600; }
+    .item-table td.right { text-align: right; }
+    .total-row { display: flex; justify-content: space-between; font-weight: 700; font-size: 14px; margin-top: 10px; }
+    .footer { text-align: center; font-size: 11px; color: #777; margin-top: 20px; }
+    .actions { margin-top: 20px; display: flex; gap: 10px; width: 100%; max-width: 400px; }
+    .btn { flex: 1; padding: 12px; text-align: center; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; }
+    .btn-primary { background: #ff6b00; color: white; }
+    .btn-secondary { background: white; border: 1px solid #ccc; color: #333; }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    
+    @media print {
+      body { background: white; padding: 0; }
+      .actions, .no-print { display: none !important; }
+      .receipt-page { box-shadow: none; border-radius: 0; max-width: none; padding: 0; margin: 0; }
+      @page { margin: 12mm; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="receipt-page" id="receipt-content">
+    <div class="header">
+      <h1>SENKE FITI</h1>
+      <p>Official Payment Receipt</p>
+    </div>
+    <div class="divider"></div>
+    
+    <div class="meta-row"><span>Date:</span> <span id="r-date"></span></div>
+    <div class="meta-row"><span>Reference:</span> <span id="r-ref"></span></div>
+    <div class="meta-row"><span>M-Pesa Receipt:</span> <span id="r-mpesa"></span></div>
+    <div class="divider"></div>
+    
+    <div class="meta-row"><strong>Paid By:</strong></div>
+    <div class="meta-row"><span id="r-customer"></span></div>
+    <div class="divider"></div>
+    
+    <table class="item-table">
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th class="right">Amount</th>
+        </tr>
+      </thead>
+      <tbody id="r-items">
+        <!-- Items injected by JS -->
+      </tbody>
+    </table>
+    
+    <div class="total-row">
+      <span>Total Paid</span>
+      <span id="r-total"></span>
+    </div>
+    <div class="divider"></div>
+    
+    <div class="footer">
+      Thank you for using Senke Fiti.<br>
+      For support, contact hello@senkefiti.co.ke
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-primary" id="btn-download">Download PDF</button>
+    <button class="btn btn-secondary" id="btn-print">Print</button>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get('ref');
+      const token = params.get('token');
+
+      if (!ref || !token) {
+        document.getElementById('receipt-content').innerHTML = '<p style="text-align:center;color:red;">Invalid receipt link.</p>';
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/receipt/${ref}/${token}`);
+        if (!res.ok) throw new Error('Receipt not found');
+        const { receipt } = await res.json();
+
+        // Populate data
+        document.getElementById('r-date').textContent = new Date(receipt.created_at).toLocaleString('en-KE');
+        document.getElementById('r-ref').textContent = receipt.order_number;
+        document.getElementById('r-mpesa').textContent = receipt.mpesa_receipt || 'N/A';
+        document.getElementById('r-customer').textContent = receipt.full_name;
+        
+        let desc = '';
+        if (receipt.purpose === 'standard_listing') desc = `Standard Listing: ${receipt.make} ${receipt.model}`;
+        else if (receipt.purpose === 'featured_listing') desc = `Boost Featured: ${receipt.make} ${receipt.model}`;
+        else if (receipt.purpose === 'verified_badge') desc = `Verified Seller Badge`;
+        else if (receipt.purpose === 'renewal') desc = `Listing Renewal: ${receipt.make} ${receipt.model}`;
+
+        document.getElementById('r-items').innerHTML = `
+          <tr>
+            <td>${desc}</td>
+            <td class="right">${Number(receipt.amount_kes).toLocaleString()}</td>
+          </tr>
+        `;
+        document.getElementById('r-total').textContent = 'KSh ' + Number(receipt.amount_kes).toLocaleString();
+
+      } catch (err) {
+        document.getElementById('receipt-content').innerHTML = '<p style="text-align:center;color:red;">Could not load receipt.</p>';
+        console.error(err);
+      }
+    });
+
+    document.getElementById('btn-print').addEventListener('click', () => {
+      window.print();
+    });
+
+    document.getElementById('btn-download').addEventListener('click', () => {
+      const btn = document.getElementById('btn-download');
+      const element = document.getElementById('receipt-content');
+      const ref = new URLSearchParams(window.location.search).get('ref') || 'receipt';
+
+      btn.disabled = true;
+      btn.textContent = 'Generating...';
+
+      html2pdf().set({
+        margin: 10,
+        filename: 'SenkeFiti-' + ref + '.pdf',
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      }).from(element).save().then(() => {
+        btn.disabled = false;
+        btn.textContent = 'Download PDF';
+      }).catch(() => {
+        alert('Failed to generate PDF.');
+        btn.disabled = false;
+        btn.textContent = 'Download PDF';
+      });
+    });
+  </script>
+</body>
+</html>

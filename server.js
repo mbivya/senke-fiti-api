@@ -3,6 +3,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import pkg from 'pg';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 import { createClient } from '@supabase/supabase-js';
@@ -38,7 +39,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Run cron jobs on startup and then every 24 hours
+// Cron Job (Runs every 24 hours)
 setInterval(async () => {
   try {
     const expired = await expireStaleListings(pool);
@@ -55,6 +56,14 @@ async function uploadToSupabase(filePath, fileBuffer, mimetype) {
   return data;
 }
 
+// Utility for order numbers
+function generateOrderNumber() {
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const random = Math.floor(1000 + Math.random() * 9000);
+  return `SF-${date}-${random}`;
+}
+
+// --- AUTH ROUTES ---
 app.post('/api/signup', async (req, res) => {
   const { phone, password, full_name } = req.body;
   if (!phone || !password || !full_name) return res.status(400).json({ error: 'All fields required.' });
@@ -133,6 +142,19 @@ app.post('/api/logout', async (req, res) => {
   res.json({ ok: true });
 });
 
+// --- NOTIFICATIONS ROUTE ---
+app.get('/api/notifications', async (req, res) => {
+  const token = getCookie(req.headers.cookie, 'session');
+  if (!token) return res.status(401).json({ error: 'Not logged in' });
+  try {
+    const userRes = await pool.query('SELECT user_id FROM sessions WHERE token = $1', [token]);
+    if (userRes.rows.length === 0) return res.status(401).json({ error: 'Invalid session' });
+    const notifs = await pool.query('SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC', [userRes.rows[0].user_id]);
+    res.json({ notifications: notifs.rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// --- LISTING ROUTES ---
 app.get('/api/listings', async (req, res) => {
   try { res.json({ listings: await searchListings(pool, req.query) }); } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -261,6 +283,7 @@ app.put('/api/listings/:id', upload.fields([{ name: 'photos', maxCount: 10 }, { 
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// --- ADMIN ROUTES ---
 app.use('/api/admin', async (req, res, next) => {
   const token = getCookie(req.headers.cookie, 'session');
   if (!token) return res.status(403).json({ error: 'Forbidden' });
@@ -279,10 +302,38 @@ app.post('/api/admin/verifications/:id/reject', async (req, res) => { try { awai
 app.get('/api/admin/listings', async (req, res) => { try { const listings = req.query.q ? await searchListingsAdmin(pool, req.query.q) : await listAllListings(pool); res.json({ listings }); } catch (err) { res.status(500).json({ error: err.message }); } });
 app.post('/api/admin/listings/:id/approve', async (req, res) => { try { await activateListing(pool, req.params.id, 12); res.json({ ok: true }); } catch (err) { res.status(500).json({ error: err.message }); } });
 app.post('/api/admin/listings/:id/suspend', async (req, res) => { try { await pool.query("UPDATE listings SET status = 'hidden', updated_at = now() WHERE id = $1", [req.params.id]); res.json({ ok: true }); } catch (err) { res.status(500).json({ error: err.message }); } });
+
+app.post('/api/admin/listings/:id/delete', async (req, res) => {
+  try {
+    const listingId = req.params.id;
+    const imagesRes = await pool.query('SELECT r2_key FROM listing_images WHERE listing_id = $1', [listingId]);
+    const docsRes = await pool.query('SELECT r2_key FROM listing_documents WHERE listing_id = $1', [listingId]);
+    const filesToDelete = [...imagesRes.rows.map(r => r.r2_key), ...docsRes.rows.map(r => r.r2_key)];
+    if (filesToDelete.length > 0) await supabase.storage.from('senke-fiti').remove(filesToDelete);
+    
+    const listingRes = await pool.query('SELECT user_id FROM listings WHERE id = $1', [listingId]);
+    const sellerId = listingRes.rows[0]?.user_id;
+
+    await pool.query('DELETE FROM listings WHERE id = $1', [listingId]);
+    
+    if (sellerId) {
+      await pool.query(
+        'INSERT INTO notifications (id, user_id, title, message) VALUES ($1, $2, $3, $4)',
+        [generateId('notif'), sellerId, 'Listing Deleted', `Your listing was removed by an admin. Please contact support for clarification.`]
+      );
+    }
+    res.json({ ok: true });
+  } catch (err) { 
+    console.error('Admin delete error:', err);
+    res.status(500).json({ error: err.message }); 
+  }
+});
+
 app.get('/api/admin/users', async (req, res) => { try { const users = req.query.q ? await searchUsersAdmin(pool, req.query.q) : await listAllUsers(pool); res.json({ users }); } catch (err) { res.status(500).json({ error: err.message }); } });
 app.post('/api/admin/users/:id/status', async (req, res) => { try { await updateUserStatus(pool, req.params.id, req.body.status, req.adminUser); res.json({ ok: true }); } catch (err) { res.status(400).json({ error: err.message }); } });
 app.post('/api/admin/users/:id/role', async (req, res) => { try { await updateUserRole(pool, req.params.id, req.body.role, req.adminUser); res.json({ ok: true }); } catch (err) { res.status(400).json({ error: err.message }); } });
 
+// --- PAYMENT ROUTES ---
 app.post('/api/payments/initiate', async (req, res) => {
   const token = getCookie(req.headers.cookie, 'session');
   if (!token) return res.status(401).json({ error: 'Not logged in' });
@@ -310,9 +361,13 @@ app.post('/api/payments/initiate', async (req, res) => {
     });
 
     if (result.id) {
+      // GENERATE RECEIPT DATA
+      const orderNumber = generateOrderNumber();
+      const orderToken = crypto.randomBytes(16).toString('hex');
+
       await pool.query(
-        'INSERT INTO payments (id, user_id, listing_id, purpose, amount_kes, phone, checkout_id, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-        [generateId('pay'), user.id, listing_id || null, purpose, amount, user.phone, result.id, 'pending']
+        'INSERT INTO payments (id, user_id, listing_id, purpose, amount_kes, phone, checkout_id, status, order_number, order_token) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+        [generateId('pay'), user.id, listing_id || null, purpose, amount, user.phone, result.id, 'pending', orderNumber, orderToken]
       );
     }
 
@@ -323,37 +378,21 @@ app.post('/api/payments/initiate', async (req, res) => {
   }
 });
 
-app.post('/api/payments/verify', async (req, res) => {
-  const { listing_id } = req.body;
-  const token = getCookie(req.headers.cookie, 'session');
-  if (!token) return res.status(401).json({ error: 'Not logged in' });
-
+// Public receipt route
+app.get('/api/receipt/:orderNumber/:token', async (req, res) => {
   try {
-    const payRes = await pool.query(
-      "SELECT checkout_id FROM payments WHERE listing_id = $1 AND status = 'pending' ORDER BY created_at DESC LIMIT 1",
-      [listing_id]
-    );
+    const { orderNumber, token } = req.params;
+    const result = await pool.query(`
+      SELECT p.*, u.full_name, l.make, l.model 
+      FROM payments p 
+      LEFT JOIN users u ON u.id = p.user_id 
+      LEFT JOIN listings l ON l.id = p.listing_id
+      WHERE p.order_number = $1 AND p.order_token = $2
+    `, [orderNumber, token]);
 
-    if (payRes.rows.length === 0) return res.json({ status: 'no_pending' });
-
-    const checkoutId = payRes.rows[0].checkout_id;
-    if (!checkoutId) return res.json({ status: 'no_pending' });
-
-    const kopoData = await checkKopoKopoStatus(checkoutId);
-    if (!kopoData) return res.json({ status: 'error' });
-
-    const status = String(kopoData?.data?.attributes?.status || kopoData?.status || '').toLowerCase();
-    const isSuccess = status === 'success' || status === 'complete';
-
-    if (isSuccess) {
-      await activateListing(pool, listing_id, 12);
-      await pool.query("UPDATE payments SET status = 'success' WHERE checkout_id = $1", [checkoutId]);
-      return res.json({ status: 'success' });
-    }
-
-    return res.json({ status: 'pending' });
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Receipt not found.' });
+    res.json({ receipt: result.rows[0] });
   } catch (err) {
-    console.error("Verify error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -367,6 +406,7 @@ app.post('/api/payments/webhook', async (req, res) => {
     const metadata = attrs?.metadata || payload?.metadata || {};
     const listingId = metadata?.listing_id;
     const purpose = metadata?.purpose;
+    const mpesaReceipt = attrs?.transaction_reference || attrs?.receipt_number || null;
 
     const isSuccess = String(status).toLowerCase() === 'success' || String(status).toLowerCase() === 'complete';
 
@@ -382,14 +422,17 @@ app.post('/api/payments/webhook', async (req, res) => {
         await pool.query("UPDATE listings SET status = 'active', expires_at = now() + interval '12 months', updated_at = now() WHERE id = $1", [listingId]);
       }
       else if (purpose === 'verified_badge') {
-        // If the payload has a user_id, use it. Otherwise, fallback to the latest pending payment.
         const userId = metadata?.user_id || (await pool.query("SELECT user_id FROM payments WHERE purpose = 'verified_badge' AND status = 'pending' ORDER BY created_at DESC LIMIT 1")).rows[0]?.user_id;
-        
         if (userId) {
            await pool.query("UPDATE users SET is_verified = true WHERE id = $1", [userId]);
-           await pool.query("UPDATE payments SET status = 'success' WHERE user_id = $1 AND purpose = 'verified_badge'", [userId]);
         }
       }
+
+      // Update payment record to success and save receipt
+      await pool.query(
+        "UPDATE payments SET status = 'success', mpesa_receipt = $1, updated_at = now() WHERE purpose = $2 AND status = 'pending' ORDER BY created_at DESC LIMIT 1",
+        [mpesaReceipt, purpose]
+      );
     }
     res.json({ ok: true, processed: true });
   } catch (err) {
