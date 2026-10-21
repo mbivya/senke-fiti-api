@@ -225,17 +225,30 @@ app.post('/api/listings', upload.fields([{ name: 'photos', maxCount: 10 }, { nam
     if (userRes.rows.length === 0) return res.status(401).json({ error: 'Invalid session' });
     const userId = userRes.rows[0].user_id;
     
-    // MODIFIED: Grab engine_type and former_use
-    const { make, model, price_kes, condition, location_town, year, engine_cc, engine_type, mileage_km, former_use, location_county, description, logbook_status } = req.body;
+    // MODIFIED: Grab all new electric fields
+    const { 
+      make, model, price_kes, condition, location_town, year, 
+      engine_cc, engine_type, mileage_km, former_use, location_county, description, logbook_status,
+      motor_power, motor_type, battery_voltage, battery_capacity, range_km, load_capacity
+    } = req.body;
+    
     if (!make || !model || !price_kes || !condition || !location_town) return res.status(400).json({ error: 'Missing required fields.' });
 
     const listingId = generateId('listing');
     
-    // MODIFIED: INSERT engine_type and former_use
+    // MODIFIED: INSERT all new electric fields
     await pool.query(
-      `INSERT INTO listings (id, user_id, make, model, year, engine_cc, engine_type, mileage_km, price_kes, condition, former_use, location_town, location_county, description, logbook_status, status) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'draft')`, 
-      [listingId, userId, make, model, year || null, engine_cc || null, engine_type || 'combustion', mileage_km || null, price_kes, condition, former_use || null, location_town, location_county || null, description || null, logbook_status || null]
+      `INSERT INTO listings (
+        id, user_id, make, model, year, engine_cc, engine_type, mileage_km, price_kes, 
+        condition, former_use, location_town, location_county, description, logbook_status, 
+        motor_power, motor_type, battery_voltage, battery_capacity, range_km, load_capacity, status
+       ) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, 'draft')`, 
+      [
+        listingId, userId, make, model, year || null, engine_cc || null, engine_type || 'combustion', mileage_km || null, price_kes, 
+        condition, former_use || null, location_town, location_county || null, description || null, logbook_status || null, 
+        motor_power || null, motor_type || null, battery_voltage || null, battery_capacity || null, range_km || null, load_capacity || null
+      ]
     );
 
     if (req.files && req.files.photos) {
@@ -268,17 +281,28 @@ app.put('/api/listings/:id', upload.fields([{ name: 'photos', maxCount: 10 }, { 
     const listingRes = await pool.query('SELECT user_id FROM listings WHERE id = $1', [listingId]);
     if (listingRes.rows.length === 0 || listingRes.rows[0].user_id !== userRes.rows[0].user_id) return res.status(403).json({ error: 'Not your listing.' });
 
-    // MODIFIED: Grab engine_type and former_use
-    const { make, model, price_kes, condition, location_town, year, engine_cc, engine_type, mileage_km, former_use, location_county, description, logbook_status } = req.body;
+    // MODIFIED: Grab all new electric fields
+    const { 
+      make, model, price_kes, condition, location_town, year, 
+      engine_cc, engine_type, mileage_km, former_use, location_county, description, logbook_status,
+      motor_power, motor_type, battery_voltage, battery_capacity, range_km, load_capacity
+    } = req.body;
     
-    // MODIFIED: UPDATE engine_type and former_use
+    // MODIFIED: UPDATE all new electric fields
     await pool.query(
       `UPDATE listings SET 
         make = $1, model = $2, year = $3, engine_cc = $4, engine_type = $5, mileage_km = $6, 
         price_kes = $7, condition = $8, former_use = $9, location_town = $10, 
-        location_county = $11, description = $12, logbook_status = $13, updated_at = now() 
-       WHERE id = $14`, 
-      [make, model, year || null, engine_cc || null, engine_type || 'combustion', mileage_km || null, price_kes, condition, former_use || null, location_town, location_county || null, description || null, logbook_status || null, listingId]
+        location_county = $11, description = $12, logbook_status = $13, 
+        motor_power = $14, motor_type = $15, battery_voltage = $16, battery_capacity = $17, range_km = $18, load_capacity = $19,
+        updated_at = now() 
+       WHERE id = $20`, 
+      [
+        make, model, year || null, engine_cc || null, engine_type || 'combustion', mileage_km || null, 
+        price_kes, condition, former_use || null, location_town, location_county || null, description || null, logbook_status || null,
+        motor_power || null, motor_type || null, battery_voltage || null, battery_capacity || null, range_km || null, load_capacity || null,
+        listingId
+      ]
     );
 
     if (req.files && req.files.photos && req.files.photos.length > 0) {

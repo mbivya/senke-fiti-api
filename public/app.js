@@ -58,7 +58,6 @@ async function initNav() {
       adminLink?.classList.add('hidden');
     }
 
-    // ADD BELL ICON
     const nav = document.getElementById('nav');
     if (nav && !document.getElementById('nav-bell')) {
       const bell = document.createElement('a');
@@ -264,11 +263,17 @@ async function loadListingForEdit(id) {
     const { listing } = await res.json();
 
     const form = document.getElementById('listing-form');
-    // MODIFIED: Added engine_type and changed intended_use to former_use
-    ['make','model','year','engine_cc','engine_type','mileage_km','price_kes','condition','former_use','location_town','location_county','description','logbook_status'].forEach(k => {
+    
+    // MODIFIED: Added all electric fields to the list of inputs to populate
+    ['make','model','year','engine_cc','engine_type','mileage_km','price_kes','condition','former_use','location_town','location_county','description','logbook_status', 'motor_power', 'motor_type', 'battery_voltage', 'battery_capacity', 'range_km', 'load_capacity'].forEach(k => {
       const el = form.elements[k];
       if (el && listing[k] != null) el.value = listing[k];
     });
+
+    // MODIFIED: Trigger the engine type toggle so the right fields show
+    if (typeof toggleEngineFields === 'function') {
+      toggleEngineFields();
+    }
   } catch {}
 }
 
@@ -281,7 +286,6 @@ const state = {
 
 function initHome() {
   const params = new URLSearchParams(window.location.search);
-  // MODIFIED: Added engine_type and former_use to URL parsing
   ['q','make','model','condition','town','price_min','price_max','cc_min','cc_max','engine_type','former_use','sort'].forEach(k => {
     if (params.get(k)) state[k] = params.get(k);
   });
@@ -320,7 +324,6 @@ function applyAndReload() {
   state.price_max = document.getElementById('filter-price-max').value;
   state.cc_min = document.getElementById('filter-cc-min').value;
   state.cc_max = document.getElementById('filter-cc-max').value;
-  // NEW: Read engine_type and former_use from inputs
   state.engine_type = document.getElementById('filter-engine-type').value;
   state.former_use = document.getElementById('filter-former-use').value;
 
@@ -364,8 +367,6 @@ function renderListings(listings) {
       : `<div class="placeholder">No photo</div>`;
     const featuredTag = l.is_featured ? '<span class="card-tag featured">★ Featured</span>' : '';
     const verifiedTag = l.seller_verified ? '<span class="card-tag verified">Verified</span>' : '';
-    
-    // NEW: Electric badge and Former use tag
     const electricTag = l.engine_type === 'electric' ? '<span class="card-tag" style="background:#e6ffe6; color:#0a7a3a; font-weight:700;">⚡ Electric</span>' : '';
     const useTag = l.former_use ? `<span class="card-tag">${capitalize(l.former_use)}</span>` : '';
 
@@ -451,8 +452,36 @@ function renderListingDetail(l) {
     ? `<div class="status-banner ${l.status}">This listing is ${escapeHtml(l.status)} and not publicly visible.</div>`
     : '';
 
-  // NEW: Electric badge and Former use on the detail page
   const electricTag = l.engine_type === 'electric' ? '<span class="card-tag" style="background:#e6ffe6; color:#0a7a3a; font-weight:700; margin-left:8px;">⚡ Electric</span>' : '';
+
+  // MODIFIED: Show electric specs if it's an electric bike
+  let specsHtml = '';
+  if (l.engine_type === 'electric') {
+    specsHtml = `
+      ${specRow('Condition', capitalize(l.condition))}
+      ${l.year ? specRow('Year', l.year) : ''}
+      ${l.motor_power ? specRow('Motor Power', l.motor_power) : ''}
+      ${l.motor_type ? specRow('Motor Type', l.motor_type) : ''}
+      ${l.battery_voltage ? specRow('Battery Voltage', l.battery_voltage) : ''}
+      ${l.battery_capacity ? specRow('Battery Capacity', l.battery_capacity) : ''}
+      ${l.range_km ? specRow('Range', l.range_km) : ''}
+      ${l.load_capacity ? specRow('Load Capacity', l.load_capacity) : ''}
+      ${l.mileage_km ? specRow('Mileage', Number(l.mileage_km).toLocaleString() + ' km') : ''}
+      ${l.former_use ? specRow('Former use', capitalize(l.former_use)) : ''}
+      ${specRow('Location', l.location_town + (l.location_county ? ', ' + l.location_county : ''))}
+      ${l.logbook_status ? specRow('Logbook', capitalize(l.logbook_status.replace('_', ' '))) : ''}
+    `;
+  } else {
+    specsHtml = `
+      ${specRow('Condition', capitalize(l.condition))}
+      ${l.year ? specRow('Year', l.year) : ''}
+      ${l.engine_cc ? specRow('Engine', l.engine_cc + ' cc') : ''}
+      ${l.mileage_km ? specRow('Mileage', Number(l.mileage_km).toLocaleString() + ' km') : ''}
+      ${l.former_use ? specRow('Former use', capitalize(l.former_use)) : ''}
+      ${specRow('Location', l.location_town + (l.location_county ? ', ' + l.location_county : ''))}
+      ${l.logbook_status ? specRow('Logbook', capitalize(l.logbook_status.replace('_', ' '))) : ''}
+    `;
+  }
 
   container.innerHTML = `
     ${statusNote}
@@ -477,13 +506,7 @@ function renderListingDetail(l) {
 
         <div class="detail-specs">
           <h3>Specifications</h3>
-          ${specRow('Condition', capitalize(l.condition))}
-          ${l.year ? specRow('Year', l.year) : ''}
-          ${l.engine_cc ? specRow(l.engine_type === 'electric' ? 'Battery/Engine' : 'Engine', l.engine_cc + ' cc') : ''}
-          ${l.mileage_km ? specRow('Mileage', Number(l.mileage_km).toLocaleString() + ' km') : ''}
-          ${l.former_use ? specRow('Former use', capitalize(l.former_use)) : ''}
-          ${specRow('Location', l.location_town + (l.location_county ? ', ' + l.location_county : ''))}
-          ${l.logbook_status ? specRow('Logbook', capitalize(l.logbook_status.replace('_', ' '))) : ''}
+          ${specsHtml}
         </div>
 
         <div class="seller-card">

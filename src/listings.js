@@ -7,10 +7,11 @@ const getPublicUrl = (key) => {
 };
 
 export async function searchListings(pool, params) {
-  // MODIFIED: Added l.engine_type and l.former_use
+  // MODIFIED: Added all the new electric motor columns
   let query = `
     SELECT l.id, l.make, l.model, l.year, l.engine_cc, l.engine_type, l.price_kes,
            l.condition, l.former_use, l.location_town, l.created_at, l.is_featured,
+           l.motor_power, l.motor_type, l.battery_voltage, l.battery_capacity, l.range_km, l.load_capacity,
            u.is_verified AS seller_verified,
            (SELECT r2_key FROM listing_images WHERE listing_id = l.id ORDER BY sort_order ASC LIMIT 1) AS cover_key
     FROM listings l
@@ -35,13 +36,11 @@ export async function searchListings(pool, params) {
     values.push(`%${params.town}%`);
     paramCount++;
   }
-  // NEW: Engine Type Filter
   if (params.engine_type) {
     query += ` AND l.engine_type = $${paramCount}`;
     values.push(params.engine_type);
     paramCount++;
   }
-  // RENAMED: use -> former_use
   if (params.former_use) {
     query += ` AND l.former_use = $${paramCount}`;
     values.push(params.former_use);
@@ -73,11 +72,12 @@ export async function searchListings(pool, params) {
 }
 
 export async function getUserListings(pool, userId) {
-  // MODIFIED: Added l.engine_type and renamed intended_use to former_use
+  // MODIFIED: Added all the new electric motor columns
   const query = `
     SELECT l.id, l.make, l.model, l.year, l.engine_cc, l.engine_type, l.price_kes, 
            l.status, l.is_paid, l.is_featured, l.expires_at, l.created_at, 
            l.location_town, l.former_use,
+           l.motor_power, l.motor_type, l.battery_voltage, l.battery_capacity, l.range_km, l.load_capacity,
            u.is_verified AS seller_verified,
            (SELECT r2_key FROM listing_images WHERE listing_id = l.id ORDER BY sort_order ASC LIMIT 1) AS cover_key
     FROM listings l
@@ -94,7 +94,6 @@ export async function getUserListings(pool, userId) {
 }
 
 export async function getListing(pool, listingId) {
-  // MODIFIED: Added l.engine_type and renamed intended_use to former_use
   const listingRes = await pool.query(`
     SELECT l.*, u.full_name AS seller_name, u.phone AS seller_phone, u.is_verified AS seller_verified
     FROM listings l

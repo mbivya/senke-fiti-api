@@ -63,22 +63,58 @@
             <input type="number" name="year" min="1970" max="2099" placeholder="2019">
           </label>
           
-          <!-- NEW: Engine Type Dropdown -->
+          <!-- Engine Type Dropdown triggers the toggle -->
           <label>Engine Type *
-            <select name="engine_type" required>
+            <select name="engine_type" id="engine-type-select" onchange="toggleEngineFields()" required>
               <option value="combustion">Petrol / Combustion</option>
               <option value="electric">Electric</option>
             </select>
           </label>
         </div>
 
-        <div class="form-row">
-          <label>Engine capacity (cc) / Battery
-            <input type="number" name="engine_cc" min="50" max="2000" placeholder="150">
-          </label>
-          <label>Mileage (km)
-            <input type="number" name="mileage_km" min="0" placeholder="45000">
-          </label>
+        <!-- COMBUSTION FIELDS (Visible by default) -->
+        <div id="combustion-fields">
+          <div class="form-row">
+            <label>Engine capacity (cc)
+              <input type="number" name="engine_cc" min="50" max="2000" placeholder="150">
+            </label>
+            <label>Mileage (km)
+              <input type="number" name="mileage_km" min="0" placeholder="45000">
+            </label>
+          </div>
+        </div>
+
+        <!-- ELECTRIC FIELDS (Hidden by default) -->
+        <div id="electric-fields" class="hidden">
+          <div class="form-row">
+            <label>Motor Power (e.g. 3000W)
+              <input type="text" name="motor_power" placeholder="e.g. 3000W">
+            </label>
+            <label>Motor Type (e.g. Brushless DC)
+              <input type="text" name="motor_type" placeholder="e.g. Brushless DC">
+            </label>
+          </div>
+          <div class="form-row">
+            <label>Battery Voltage (e.g. 72V)
+              <input type="text" name="battery_voltage" placeholder="e.g. 72V">
+            </label>
+            <label>Battery Capacity (e.g. 40Ah)
+              <input type="text" name="battery_capacity" placeholder="e.g. 40Ah">
+            </label>
+          </div>
+          <div class="form-row">
+            <label>Range (km)
+              <input type="text" name="range_km" placeholder="e.g. 80 km">
+            </label>
+            <label>Load Capacity (kg)
+              <input type="text" name="load_capacity" placeholder="e.g. 200 kg">
+            </label>
+          </div>
+          <div class="form-row">
+            <label>Mileage (km) - Odometer
+              <input type="number" name="mileage_km" min="0" placeholder="0">
+            </label>
+          </div>
         </div>
 
         <div class="form-row">
@@ -94,7 +130,6 @@
           </label>
         </div>
 
-        <!-- MODIFIED: Renamed to Former Use -->
         <label>Former use (What was it used for?)
           <select name="former_use">
             <option value="">Select...</option>
@@ -187,6 +222,22 @@
     <p class="footer-copy">© <span id="year"></span> Senke Fiti. All rights reserved.</p>
   </footer>
 
+  <script>
+    // Function to toggle between Combustion and Electric fields
+    function toggleEngineFields() {
+      const type = document.getElementById('engine-type-select').value;
+      const combustion = document.getElementById('combustion-fields');
+      const electric = document.getElementById('electric-fields');
+
+      if (type === 'electric') {
+        combustion.classList.add('hidden');
+        electric.classList.remove('hidden');
+      } else {
+        combustion.classList.remove('hidden');
+        electric.classList.add('hidden');
+      }
+    }
+  </script>
   <script src="/app.js"></script>
 </body>
 </html>
