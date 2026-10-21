@@ -58,6 +58,7 @@ async function initNav() {
       adminLink?.classList.add('hidden');
     }
 
+    // ADD BELL ICON
     const nav = document.getElementById('nav');
     if (nav && !document.getElementById('nav-bell')) {
       const bell = document.createElement('a');
@@ -263,7 +264,8 @@ async function loadListingForEdit(id) {
     const { listing } = await res.json();
 
     const form = document.getElementById('listing-form');
-    ['make','model','year','engine_cc','mileage_km','price_kes','condition','intended_use','location_town','location_county','description','logbook_status'].forEach(k => {
+    // MODIFIED: Added engine_type and changed intended_use to former_use
+    ['make','model','year','engine_cc','engine_type','mileage_km','price_kes','condition','former_use','location_town','location_county','description','logbook_status'].forEach(k => {
       const el = form.elements[k];
       if (el && listing[k] != null) el.value = listing[k];
     });
@@ -271,11 +273,16 @@ async function loadListingForEdit(id) {
 }
 
 // --- HOMEPAGE SEARCH ---
-const state = { q: '', make: '', model: '', condition: '', town: '', price_min: '', price_max: '', cc_min: '', cc_max: '', use: '', sort: 'newest' };
+const state = { 
+  q: '', make: '', model: '', condition: '', town: '', 
+  price_min: '', price_max: '', cc_min: '', cc_max: '', 
+  engine_type: '', former_use: '', sort: 'newest' 
+};
 
 function initHome() {
   const params = new URLSearchParams(window.location.search);
-  ['q','make','model','condition','town','price_min','price_max','cc_min','cc_max','use','sort'].forEach(k => {
+  // MODIFIED: Added engine_type and former_use to URL parsing
+  ['q','make','model','condition','town','price_min','price_max','cc_min','cc_max','engine_type','former_use','sort'].forEach(k => {
     if (params.get(k)) state[k] = params.get(k);
   });
 
@@ -288,7 +295,8 @@ function initHome() {
   document.getElementById('filter-price-max').value = state.price_max;
   document.getElementById('filter-cc-min').value = state.cc_min;
   document.getElementById('filter-cc-max').value = state.cc_max;
-  document.getElementById('filter-use').value = state.use;
+  document.getElementById('filter-engine-type').value = state.engine_type;
+  document.getElementById('filter-former-use').value = state.former_use;
   document.getElementById('sort-by').value = state.sort;
 
   document.getElementById('apply-filters').addEventListener('click', applyAndReload);
@@ -312,7 +320,9 @@ function applyAndReload() {
   state.price_max = document.getElementById('filter-price-max').value;
   state.cc_min = document.getElementById('filter-cc-min').value;
   state.cc_max = document.getElementById('filter-cc-max').value;
-  state.use = document.getElementById('filter-use').value;
+  // NEW: Read engine_type and former_use from inputs
+  state.engine_type = document.getElementById('filter-engine-type').value;
+  state.former_use = document.getElementById('filter-former-use').value;
 
   const params = new URLSearchParams();
   Object.entries(state).forEach(([k, v]) => { if (v) params.set(k, v); });
@@ -354,6 +364,10 @@ function renderListings(listings) {
       : `<div class="placeholder">No photo</div>`;
     const featuredTag = l.is_featured ? '<span class="card-tag featured">★ Featured</span>' : '';
     const verifiedTag = l.seller_verified ? '<span class="card-tag verified">Verified</span>' : '';
+    
+    // NEW: Electric badge and Former use tag
+    const electricTag = l.engine_type === 'electric' ? '<span class="card-tag" style="background:#e6ffe6; color:#0a7a3a; font-weight:700;">⚡ Electric</span>' : '';
+    const useTag = l.former_use ? `<span class="card-tag">${capitalize(l.former_use)}</span>` : '';
 
     return `
       <a class="card" href="/listing.html?id=${encodeURIComponent(l.id)}">
@@ -364,6 +378,8 @@ function renderListings(listings) {
           <div class="card-meta">
             <span class="card-tag">${escapeHtml(l.condition)}</span>
             ${l.engine_cc ? `<span class="card-tag">${l.engine_cc}cc</span>` : ''}
+            ${electricTag}
+            ${useTag}
             ${featuredTag}
             ${verifiedTag}
             <span>${escapeHtml(l.location_town)}</span>
@@ -435,6 +451,9 @@ function renderListingDetail(l) {
     ? `<div class="status-banner ${l.status}">This listing is ${escapeHtml(l.status)} and not publicly visible.</div>`
     : '';
 
+  // NEW: Electric badge and Former use on the detail page
+  const electricTag = l.engine_type === 'electric' ? '<span class="card-tag" style="background:#e6ffe6; color:#0a7a3a; font-weight:700; margin-left:8px;">⚡ Electric</span>' : '';
+
   container.innerHTML = `
     ${statusNote}
     <div class="detail-grid">
@@ -453,16 +472,16 @@ function renderListingDetail(l) {
       </div>
 
       <div class="detail-info">
-        <h1 class="detail-title">${escapeHtml(l.make)} ${escapeHtml(l.model)}</h1>
+        <h1 class="detail-title">${escapeHtml(l.make)} ${escapeHtml(l.model)}${electricTag}</h1>
         <div class="detail-price">${formatKes(l.price_kes)}</div>
 
         <div class="detail-specs">
           <h3>Specifications</h3>
           ${specRow('Condition', capitalize(l.condition))}
           ${l.year ? specRow('Year', l.year) : ''}
-          ${l.engine_cc ? specRow('Engine', l.engine_cc + ' cc') : ''}
+          ${l.engine_cc ? specRow(l.engine_type === 'electric' ? 'Battery/Engine' : 'Engine', l.engine_cc + ' cc') : ''}
           ${l.mileage_km ? specRow('Mileage', Number(l.mileage_km).toLocaleString() + ' km') : ''}
-          ${l.intended_use ? specRow('Intended use', capitalize(l.intended_use)) : ''}
+          ${l.former_use ? specRow('Former use', capitalize(l.former_use)) : ''}
           ${specRow('Location', l.location_town + (l.location_county ? ', ' + l.location_county : ''))}
           ${l.logbook_status ? specRow('Logbook', capitalize(l.logbook_status.replace('_', ' '))) : ''}
         </div>
@@ -639,6 +658,7 @@ async function loadDashboardListings() {
 
       const verifiedTag = l.seller_verified ? '<span class="card-tag verified">Verified</span>' : '';
       const hiddenNote = l.status === 'hidden' ? '<p style="color:var(--red); font-size:12px; margin-top:4px;">Suspended by Admin. Contact support.</p>' : '';
+      const electricTag = l.engine_type === 'electric' ? '<span class="card-tag" style="background:#e6ffe6; color:#0a7a3a; font-weight:700;">⚡ Electric</span>' : '';
 
       return `
         <div class="dash-card">
@@ -649,6 +669,7 @@ async function loadDashboardListings() {
             <div class="dash-card-meta">
               <span class="status-badge status-${l.status}">${l.status}</span>
               <span>${escapeHtml(l.location_town)}</span>
+              ${electricTag}
               ${l.is_featured ? '<span class="card-tag featured">★ Featured</span>' : ''}
               ${verifiedTag}
             </div>
@@ -828,14 +849,12 @@ function initAdmin() {
 
     window.__adminUser = user;
 
-    // Load initial data
     loadReports();
     loadVerifications();
     loadAllListings();
     loadAllUsers();
-    loadStats(); // NEW
+    loadStats();
 
-    // Add tabs for Admin Listings
     const adminListingsSection = document.getElementById('admin-listings');
     const listContainer = document.getElementById('all-listings');
     
@@ -886,13 +905,11 @@ function initAdmin() {
   }).catch(() => denied.classList.remove('hidden'));
 }
 
-// NEW: Function to load admin stats
 async function loadStats() {
   try {
     const res = await fetch('/api/admin/stats');
     const data = await res.json();
     
-    // Render Stats Cards
     document.getElementById('admin-stats').innerHTML = `
       <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;">
         <div class="stat-card" style="background: linear-gradient(135deg, #1a1a1a, #333); color: white; border: none; padding: 24px;">
@@ -914,7 +931,6 @@ async function loadStats() {
       </div>
     `;
 
-    // Render Recent Lists
     document.getElementById('admin-recent-lists').innerHTML = `
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
         <div class="admin-section">

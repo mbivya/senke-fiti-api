@@ -7,10 +7,10 @@ const getPublicUrl = (key) => {
 };
 
 export async function searchListings(pool, params) {
-  // MODIFIED: Join users table to get seller_verified
+  // MODIFIED: Added l.engine_type and l.former_use
   let query = `
-    SELECT l.id, l.make, l.model, l.year, l.engine_cc, l.price_kes,
-           l.condition, l.location_town, l.created_at, l.is_featured,
+    SELECT l.id, l.make, l.model, l.year, l.engine_cc, l.engine_type, l.price_kes,
+           l.condition, l.former_use, l.location_town, l.created_at, l.is_featured,
            u.is_verified AS seller_verified,
            (SELECT r2_key FROM listing_images WHERE listing_id = l.id ORDER BY sort_order ASC LIMIT 1) AS cover_key
     FROM listings l
@@ -33,6 +33,18 @@ export async function searchListings(pool, params) {
   if (params.town) {
     query += ` AND l.location_town ILIKE $${paramCount}`;
     values.push(`%${params.town}%`);
+    paramCount++;
+  }
+  // NEW: Engine Type Filter
+  if (params.engine_type) {
+    query += ` AND l.engine_type = $${paramCount}`;
+    values.push(params.engine_type);
+    paramCount++;
+  }
+  // RENAMED: use -> former_use
+  if (params.former_use) {
+    query += ` AND l.former_use = $${paramCount}`;
+    values.push(params.former_use);
     paramCount++;
   }
   if (params.price_min) {
@@ -61,10 +73,11 @@ export async function searchListings(pool, params) {
 }
 
 export async function getUserListings(pool, userId) {
-  // MODIFIED: Join users table to get seller_verified for dashboard
+  // MODIFIED: Added l.engine_type and renamed intended_use to former_use
   const query = `
-    SELECT l.id, l.make, l.model, l.year, l.price_kes, l.status, l.is_paid,
-           l.is_featured, l.expires_at, l.created_at, l.location_town,
+    SELECT l.id, l.make, l.model, l.year, l.engine_cc, l.engine_type, l.price_kes, 
+           l.status, l.is_paid, l.is_featured, l.expires_at, l.created_at, 
+           l.location_town, l.former_use,
            u.is_verified AS seller_verified,
            (SELECT r2_key FROM listing_images WHERE listing_id = l.id ORDER BY sort_order ASC LIMIT 1) AS cover_key
     FROM listings l
@@ -81,6 +94,7 @@ export async function getUserListings(pool, userId) {
 }
 
 export async function getListing(pool, listingId) {
+  // MODIFIED: Added l.engine_type and renamed intended_use to former_use
   const listingRes = await pool.query(`
     SELECT l.*, u.full_name AS seller_name, u.phone AS seller_phone, u.is_verified AS seller_verified
     FROM listings l

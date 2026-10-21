@@ -216,6 +216,7 @@ app.post('/api/listings/:id/delete', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// CREATE NEW LISTING
 app.post('/api/listings', upload.fields([{ name: 'photos', maxCount: 10 }, { name: 'documents', maxCount: 5 }]), async (req, res) => {
   const token = getCookie(req.headers.cookie, 'session');
   if (!token) return res.status(401).json({ error: 'Not logged in' });
@@ -223,11 +224,19 @@ app.post('/api/listings', upload.fields([{ name: 'photos', maxCount: 10 }, { nam
     const userRes = await pool.query('SELECT user_id FROM sessions WHERE token = $1', [token]);
     if (userRes.rows.length === 0) return res.status(401).json({ error: 'Invalid session' });
     const userId = userRes.rows[0].user_id;
-    const { make, model, price_kes, condition, location_town, year, engine_cc, mileage_km, intended_use, location_county, description, logbook_status } = req.body;
+    
+    // MODIFIED: Grab engine_type and former_use
+    const { make, model, price_kes, condition, location_town, year, engine_cc, engine_type, mileage_km, former_use, location_county, description, logbook_status } = req.body;
     if (!make || !model || !price_kes || !condition || !location_town) return res.status(400).json({ error: 'Missing required fields.' });
 
     const listingId = generateId('listing');
-    await pool.query(`INSERT INTO listings (id, user_id, make, model, year, engine_cc, mileage_km, price_kes, condition, intended_use, location_town, location_county, description, logbook_status, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'draft')`, [listingId, userId, make, model, year || null, engine_cc || null, mileage_km || null, price_kes, condition, intended_use || null, location_town, location_county || null, description || null, logbook_status || null]);
+    
+    // MODIFIED: INSERT engine_type and former_use
+    await pool.query(
+      `INSERT INTO listings (id, user_id, make, model, year, engine_cc, engine_type, mileage_km, price_kes, condition, former_use, location_town, location_county, description, logbook_status, status) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'draft')`, 
+      [listingId, userId, make, model, year || null, engine_cc || null, engine_type || 'combustion', mileage_km || null, price_kes, condition, former_use || null, location_town, location_county || null, description || null, logbook_status || null]
+    );
 
     if (req.files && req.files.photos) {
       for (let i = 0; i < req.files.photos.length; i++) {
@@ -248,6 +257,7 @@ app.post('/api/listings', upload.fields([{ name: 'photos', maxCount: 10 }, { nam
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// UPDATE EXISTING LISTING
 app.put('/api/listings/:id', upload.fields([{ name: 'photos', maxCount: 10 }, { name: 'documents', maxCount: 5 }]), async (req, res) => {
   const token = getCookie(req.headers.cookie, 'session');
   if (!token) return res.status(401).json({ error: 'Not logged in' });
@@ -258,8 +268,18 @@ app.put('/api/listings/:id', upload.fields([{ name: 'photos', maxCount: 10 }, { 
     const listingRes = await pool.query('SELECT user_id FROM listings WHERE id = $1', [listingId]);
     if (listingRes.rows.length === 0 || listingRes.rows[0].user_id !== userRes.rows[0].user_id) return res.status(403).json({ error: 'Not your listing.' });
 
-    const { make, model, price_kes, condition, location_town, year, engine_cc, mileage_km, intended_use, location_county, description, logbook_status } = req.body;
-    await pool.query(`UPDATE listings SET make = $1, model = $2, year = $3, engine_cc = $4, mileage_km = $5, price_kes = $6, condition = $7, intended_use = $8, location_town = $9, location_county = $10, description = $11, logbook_status = $12, updated_at = now() WHERE id = $13`, [make, model, year || null, engine_cc || null, mileage_km || null, price_kes, condition, intended_use || null, location_town, location_county || null, description || null, logbook_status || null, listingId]);
+    // MODIFIED: Grab engine_type and former_use
+    const { make, model, price_kes, condition, location_town, year, engine_cc, engine_type, mileage_km, former_use, location_county, description, logbook_status } = req.body;
+    
+    // MODIFIED: UPDATE engine_type and former_use
+    await pool.query(
+      `UPDATE listings SET 
+        make = $1, model = $2, year = $3, engine_cc = $4, engine_type = $5, mileage_km = $6, 
+        price_kes = $7, condition = $8, former_use = $9, location_town = $10, 
+        location_county = $11, description = $12, logbook_status = $13, updated_at = now() 
+       WHERE id = $14`, 
+      [make, model, year || null, engine_cc || null, engine_type || 'combustion', mileage_km || null, price_kes, condition, former_use || null, location_town, location_county || null, description || null, logbook_status || null, listingId]
+    );
 
     if (req.files && req.files.photos && req.files.photos.length > 0) {
       const maxOrderRes = await pool.query('SELECT MAX(sort_order) as max FROM listing_images WHERE listing_id = $1', [listingId]);
@@ -293,35 +313,24 @@ app.use('/api/admin', async (req, res, next) => {
   next();
 });
 
-// NEW: Admin Overview Stats Route
 app.get('/api/admin/stats', async (req, res) => {
   try {
-    // 1. Total Revenue (Successful payments only)
     const revRes = await pool.query("SELECT SUM(amount_kes) as total FROM payments WHERE status = 'success'");
     const totalRevenue = revRes.rows[0].total || 0;
-
-    // 2. Total Users
     const userRes = await pool.query("SELECT COUNT(*) as count FROM users");
     const totalUsers = parseInt(userRes.rows[0].count);
-
-    // 3. Total Listings
     const listRes = await pool.query("SELECT COUNT(*) as count FROM listings");
     const totalListings = parseInt(listRes.rows[0].count);
-
-    // 4. Pending Actions (Reports + Verifications)
     const repRes = await pool.query("SELECT COUNT(*) as count FROM reports WHERE status = 'open'");
     const verRes = await pool.query("SELECT COUNT(*) as count FROM sellers_verification WHERE status = 'pending'");
     const pendingActions = parseInt(repRes.rows[0].count) + parseInt(verRes.rows[0].count);
 
-    // 5. Recent Transactions
     const recentPayRes = await pool.query(`
       SELECT p.amount_kes, p.purpose, p.mpesa_receipt, p.created_at, u.full_name
       FROM payments p JOIN users u ON u.id = p.user_id
       WHERE p.status = 'success'
       ORDER BY p.created_at DESC LIMIT 5
     `);
-
-    // 6. Recent Signups
     const recentUserRes = await pool.query(`
       SELECT full_name, phone, created_at
       FROM users
@@ -329,16 +338,11 @@ app.get('/api/admin/stats', async (req, res) => {
     `);
 
     res.json({
-      totalRevenue,
-      totalUsers,
-      totalListings,
-      pendingActions,
+      totalRevenue, totalUsers, totalListings, pendingActions,
       recentTransactions: recentPayRes.rows,
       recentSignups: recentUserRes.rows
     });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/admin/reports', async (req, res) => { try { res.json({ reports: await listReports(pool) }); } catch (err) { res.status(500).json({ error: err.message }); } });
@@ -437,9 +441,7 @@ app.get('/api/receipt/:orderNumber/:token', async (req, res) => {
 
     if (result.rows.length === 0) return res.status(404).json({ error: 'Receipt not found.' });
     res.json({ receipt: result.rows[0] });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/payments/verify', async (req, res) => {
@@ -452,9 +454,7 @@ app.post('/api/payments/verify', async (req, res) => {
       "SELECT checkout_id FROM payments WHERE listing_id = $1 AND status = 'pending' ORDER BY created_at DESC LIMIT 1",
       [listing_id]
     );
-
     if (payRes.rows.length === 0) return res.json({ status: 'no_pending' });
-
     const checkoutId = payRes.rows[0].checkout_id;
     if (!checkoutId) return res.json({ status: 'no_pending' });
 
@@ -469,12 +469,8 @@ app.post('/api/payments/verify', async (req, res) => {
       await pool.query("UPDATE payments SET status = 'success' WHERE checkout_id = $1", [checkoutId]);
       return res.json({ status: 'success' });
     }
-
     return res.json({ status: 'pending' });
-  } catch (err) {
-    console.error("Verify error:", err);
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/payments/webhook', async (req, res) => {
@@ -492,10 +488,7 @@ app.post('/api/payments/webhook', async (req, res) => {
 
     if (isSuccess) {
       await pool.query(
-        `UPDATE payments 
-         SET status = 'success', mpesa_receipt = $1, updated_at = now() 
-         WHERE purpose = $2 AND status = 'pending' 
-         ORDER BY created_at DESC LIMIT 1`,
+        `UPDATE payments SET status = 'success', mpesa_receipt = $1, updated_at = now() WHERE purpose = $2 AND status = 'pending' ORDER BY created_at DESC LIMIT 1`,
         [mpesaReceipt, purpose]
       );
 
