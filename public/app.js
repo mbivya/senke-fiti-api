@@ -16,7 +16,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ---------- SHARED ----------
-
 function initYear() {
   const y = document.getElementById('year');
   if (y) y.textContent = new Date().getFullYear();
@@ -87,7 +86,6 @@ async function initNav() {
 }
 
 // ---------- MOBILE MENU ----------
-
 async function initMobileMenu() {
   const btn = document.getElementById('hamburger');
   const menu = document.getElementById('mobile-menu');
@@ -145,7 +143,6 @@ async function initMobileMenu() {
 }
 
 // ---------- LOGIN PAGE ----------
-
 function initLoginPage() {
   const tabs = document.querySelectorAll('.tab');
   const loginForm = document.getElementById('login-form');
@@ -213,7 +210,6 @@ function initLoginPage() {
 }
 
 // ---------- UPLOAD / EDIT FORM ----------
-
 let editingListingId = null;
 
 function initListingForm() {
@@ -275,7 +271,6 @@ async function loadListingForEdit(id) {
 }
 
 // ---------- HOMEPAGE SEARCH ----------
-
 const state = {
   q: '', make: '', model: '', condition: '', town: '',
   price_min: '', price_max: '', cc_min: '', cc_max: '',
@@ -382,7 +377,6 @@ function renderListings(listings) {
 }
 
 // ---------- LISTING DETAIL ----------
-
 function initListingDetail() {
   const params = new URLSearchParams(window.location.search);
   const id = params.get('id');
@@ -520,7 +514,6 @@ function specRow(label, value) {
 }
 
 // ---------- DASHBOARD ----------
-
 let currentDashboardTab = 'all';
 
 async function initDashboard() {
@@ -686,9 +679,18 @@ async function handleDashboardAction(action, id) {
   }
 
   if (action === 'renew') {
-    if (!confirm('Renew this listing for KSh 300? (payment flow coming soon)')) return;
-    await fetch(`/api/listings/${encodeURIComponent(id)}/renew`, { method: 'POST' });
-    loadDashboardListings();
+    const ok = confirm('Renew this listing for KSh 300? Payment will be requested on your phone.');
+    if (!ok) return;
+    try {
+      const res = await fetch('/api/payments/initiate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ listing_id: id, purpose: 'renewal' })
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || 'Could not start payment.'); return; }
+      alert('STK push sent to your phone. Enter your M-Pesa PIN to complete.');
+    } catch { alert('Network error.'); }
     return;
   }
 
@@ -753,7 +755,6 @@ async function handleDashboardAction(action, id) {
 }
 
 // ---------- VERIFY PAGE ----------
-
 async function initVerifyPage() {
   const guest = document.getElementById('verify-guest');
   const already = document.getElementById('verify-already');
@@ -802,7 +803,6 @@ async function initVerifyPage() {
 }
 
 // ---------- ADMIN ----------
-
 function initAdmin() {
   const denied = document.getElementById('admin-denied');
   const content = document.getElementById('admin-content');

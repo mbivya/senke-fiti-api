@@ -10,6 +10,7 @@ import { createClient } from '@supabase/supabase-js';
 import { activateListing, searchListings, getUserListings, getListing } from './src/listings.js';
 import { hashPassword, verifyPassword, generateId, normalizePhone, getCookie, buildSessionCookie, buildLogoutCookie } from './src/auth.js';
 import { initiateStkPush, checkKopoKopoStatus } from './src/payments.js';
+import { expireStaleListings, deleteOldDrafts } from './src/cron.js'; // NEW
 import { 
   listReports, listVerifications, approveVerification, rejectVerification, 
   listAllListings, listAllUsers, searchListingsAdmin, searchUsersAdmin, 
@@ -36,6 +37,17 @@ const upload = multer({ storage: multer.memoryStorage() });
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Run cron jobs on startup and then every 24 hours
+setInterval(async () => {
+  try {
+    const expired = await expireStaleListings(pool);
+    const deleted = await deleteOldDrafts(pool);
+    console.log(`Cron: Expired ${expired} listings. Deleted ${deleted} old drafts.`);
+  } catch (err) {
+    console.error('Cron job failed:', err);
+  }
+}, 24 * 60 * 60 * 1000); // 24 hours
 
 async function uploadToSupabase(filePath, fileBuffer, mimetype) {
   const { data, error } = await supabase.storage.from('senke-fiti').upload(filePath, fileBuffer, { contentType: mimetype });
@@ -83,6 +95,29 @@ app.post('/api/login', async (req, res) => {
     await pool.query('INSERT INTO sessions (id, user_id, token) VALUES ($1, $2, $3)', [generateId('sess'), user.id, token]);
     res.setHeader('Set-Cookie', buildSessionCookie(token));
     res.json({ ok: true, user: { id: user.id, phone: user.phone, full_name: user.full_name, role: user.role } });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// NEW: Forgot Password
+app.post('/api/forgot-password', async (req, res) => {
+  const { phone } = req.body;
+  const normalizedPhone = normalizePhone(phone);
+  if (!normalizedPhone) return res.status(400).json({ error: 'Invalid phone number.' });
+
+  try {
+    const result = await pool.query('SELECT id, full_name FROM users WHERE phone = $1', [normalizedPhone]);
+    const user = result.rows[0];
+    if (!user) return res.status(404).json({ error: 'No account found with that number.' });
+
+    // In a production app, we would send an SMS here with a temp PIN.
+    // Since we don't have SMS integration, we generate a new random password and hash it.
+    const tempPin = Math.floor(100000 + Math.random() * 900000).toString();
+    const newHash = await hashPassword(tempPin);
+    
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, user.id]);
+
+    // In a real app, you would hide this and send it via SMS. For now, we return it.
+    res.json({ ok: true, message: `Password reset. Your temporary PIN is: ${tempPin}. Please log in and change it.` });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -264,7 +299,7 @@ app.post('/api/payments/initiate', async (req, res) => {
     if (userRes.rows.length === 0) return res.status(401).json({ error: 'Invalid session' });
     const user = userRes.rows[0];
 
-    const PRICES = { standard_listing: 300, featured_listing: 1000, verified_badge: 500 };
+    const PRICES = { standard_listing: 300, featured_listing: 1000, verified_badge: 500, renewal: 300 };
     const amount = PRICES[purpose];
     if (!amount) return res.status(400).json({ error: 'Unknown purpose.' });
 
@@ -282,7 +317,7 @@ app.post('/api/payments/initiate', async (req, res) => {
     if (result.id) {
       await pool.query(
         'INSERT INTO payments (id, user_id, listing_id, purpose, amount_kes, phone, checkout_id, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-        [generateId('pay'), user.id, listing_id, purpose, amount, user.phone, result.id, 'pending']
+        [generateId('pay'), user.id, listing_id || null, purpose, amount, user.phone, result.id, 'pending']
       );
     }
 
@@ -340,12 +375,24 @@ app.post('/api/payments/webhook', async (req, res) => {
 
     const isSuccess = String(status).toLowerCase() === 'success' || String(status).toLowerCase() === 'complete';
 
-    if (isSuccess && listingId) {
-      if (purpose === 'standard_listing') {
+    if (isSuccess) {
+      if (purpose === 'standard_listing' && listingId) {
         await activateListing(pool, listingId, 12);
-      } else if (purpose === 'featured_listing') {
+      } 
+      else if (purpose === 'featured_listing' && listingId) {
         await activateListing(pool, listingId, 12);
         await pool.query("UPDATE listings SET is_featured = true, featured_until = now() + interval '30 days' WHERE id = $1", [listingId]);
+      }
+      else if (purpose === 'renewal' && listingId) {
+        await pool.query("UPDATE listings SET status = 'active', expires_at = now() + interval '12 months', updated_at = now() WHERE id = $1", [listingId]);
+      }
+      else if (purpose === 'verified_badge') {
+        // Update the most recent pending payment for this purpose
+        const payRecord = await pool.query("SELECT user_id FROM payments WHERE purpose = 'verified_badge' AND status = 'pending' ORDER BY created_at DESC LIMIT 1");
+        if (payRecord.rows.length > 0) {
+           await pool.query("UPDATE users SET is_verified = true WHERE id = $1", [payRecord.rows[0].user_id]);
+           await pool.query("UPDATE payments SET status = 'success' WHERE user_id = $1 AND purpose = 'verified_badge'", [payRecord.rows[0].user_id]);
+        }
       }
     }
     res.json({ ok: true, processed: true });
