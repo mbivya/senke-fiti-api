@@ -382,10 +382,12 @@ app.post('/api/payments/webhook', async (req, res) => {
         await pool.query("UPDATE listings SET status = 'active', expires_at = now() + interval '12 months', updated_at = now() WHERE id = $1", [listingId]);
       }
       else if (purpose === 'verified_badge') {
-        const payRecord = await pool.query("SELECT user_id FROM payments WHERE purpose = 'verified_badge' AND status = 'pending' ORDER BY created_at DESC LIMIT 1");
-        if (payRecord.rows.length > 0) {
-           await pool.query("UPDATE users SET is_verified = true WHERE id = $1", [payRecord.rows[0].user_id]);
-           await pool.query("UPDATE payments SET status = 'success' WHERE user_id = $1 AND purpose = 'verified_badge'", [payRecord.rows[0].user_id]);
+        // If the payload has a user_id, use it. Otherwise, fallback to the latest pending payment.
+        const userId = metadata?.user_id || (await pool.query("SELECT user_id FROM payments WHERE purpose = 'verified_badge' AND status = 'pending' ORDER BY created_at DESC LIMIT 1")).rows[0]?.user_id;
+        
+        if (userId) {
+           await pool.query("UPDATE users SET is_verified = true WHERE id = $1", [userId]);
+           await pool.query("UPDATE payments SET status = 'success' WHERE user_id = $1 AND purpose = 'verified_badge'", [userId]);
         }
       }
     }
