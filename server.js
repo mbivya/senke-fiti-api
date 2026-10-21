@@ -397,6 +397,41 @@ app.get('/api/receipt/:orderNumber/:token', async (req, res) => {
   }
 });
 
+app.post('/api/payments/verify', async (req, res) => {
+  const { listing_id } = req.body;
+  const token = getCookie(req.headers.cookie, 'session');
+  if (!token) return res.status(401).json({ error: 'Not logged in' });
+
+  try {
+    const payRes = await pool.query(
+      "SELECT checkout_id FROM payments WHERE listing_id = $1 AND status = 'pending' ORDER BY created_at DESC LIMIT 1",
+      [listing_id]
+    );
+
+    if (payRes.rows.length === 0) return res.json({ status: 'no_pending' });
+
+    const checkoutId = payRes.rows[0].checkout_id;
+    if (!checkoutId) return res.json({ status: 'no_pending' });
+
+    const kopoData = await checkKopoKopoStatus(checkoutId);
+    if (!kopoData) return res.json({ status: 'error' });
+
+    const status = String(kopoData?.data?.attributes?.status || kopoData?.status || '').toLowerCase();
+    const isSuccess = status === 'success' || status === 'complete';
+
+    if (isSuccess) {
+      await activateListing(pool, listing_id, 12);
+      await pool.query("UPDATE payments SET status = 'success' WHERE checkout_id = $1", [checkoutId]);
+      return res.json({ status: 'success' });
+    }
+
+    return res.json({ status: 'pending' });
+  } catch (err) {
+    console.error("Verify error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/payments/webhook', async (req, res) => {
   console.log('Webhook received:', req.body);
   try {
@@ -406,11 +441,23 @@ app.post('/api/payments/webhook', async (req, res) => {
     const metadata = attrs?.metadata || payload?.metadata || {};
     const listingId = metadata?.listing_id;
     const purpose = metadata?.purpose;
+    
+    // Extract the M-Pesa receipt number from KopoKopo's payload
     const mpesaReceipt = attrs?.transaction_reference || attrs?.receipt_number || null;
 
     const isSuccess = String(status).toLowerCase() === 'success' || String(status).toLowerCase() === 'complete';
 
     if (isSuccess) {
+      // 1. Update the payment record FIRST (so the receipt updates)
+      await pool.query(
+        `UPDATE payments 
+         SET status = 'success', mpesa_receipt = $1, updated_at = now() 
+         WHERE purpose = $2 AND status = 'pending' 
+         ORDER BY created_at DESC LIMIT 1`,
+        [mpesaReceipt, purpose]
+      );
+
+      // 2. Activate the listing/feature/badge
       if (purpose === 'standard_listing' && listingId) {
         await activateListing(pool, listingId, 12);
       } 
@@ -427,12 +474,6 @@ app.post('/api/payments/webhook', async (req, res) => {
            await pool.query("UPDATE users SET is_verified = true WHERE id = $1", [userId]);
         }
       }
-
-      // Update payment record to success and save receipt
-      await pool.query(
-        "UPDATE payments SET status = 'success', mpesa_receipt = $1, updated_at = now() WHERE purpose = $2 AND status = 'pending' ORDER BY created_at DESC LIMIT 1",
-        [mpesaReceipt, purpose]
-      );
     }
     res.json({ ok: true, processed: true });
   } catch (err) {
