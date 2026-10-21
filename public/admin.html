@@ -52,14 +52,21 @@
     </div>
 
     <div id="admin-content" class="hidden">
+      <!-- NEW: Admin Overview Section -->
+      <section class="admin-section" id="admin-overview">
+        <div id="admin-stats"></div>
+        <div id="admin-recent-lists"></div>
+      </section>
+
       <div class="admin-tabs">
-        <button class="admin-tab active" data-tab="reports">Reports</button>
+        <button class="admin-tab active" data-tab="overview">Overview</button>
+        <button class="admin-tab" data-tab="reports">Reports</button>
         <button class="admin-tab" data-tab="verifications">Verifications</button>
         <button class="admin-tab" data-tab="listings">All Listings</button>
         <button class="admin-tab" data-tab="users">Users</button>
       </div>
 
-      <section class="admin-section" id="admin-reports">
+      <section class="admin-section hidden" id="admin-reports">
         <h2>Open reports</h2>
         <div id="reports-list" class="admin-list">
           <p class="loading">Loading reports...</p>
@@ -119,7 +126,7 @@
         <h4>Company</h4>
         <a href="/about.html">About</a>
         <a href="/terms.html">Terms & conditions</a>
-        <a href="/privacy.html">Privacy policy</a>
+        <a href="/privacy.html">Privacy Policy</a>
         <a href="/cookies.html">Cookie policy</a>
       </div>
     </div>

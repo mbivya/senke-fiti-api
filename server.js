@@ -39,7 +39,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Cron Job (Runs every 24 hours)
+// Cron Job
 setInterval(async () => {
   try {
     const expired = await expireStaleListings(pool);
@@ -56,7 +56,6 @@ async function uploadToSupabase(filePath, fileBuffer, mimetype) {
   return data;
 }
 
-// Utility for order numbers
 function generateOrderNumber() {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const random = Math.floor(1000 + Math.random() * 9000);
@@ -294,6 +293,54 @@ app.use('/api/admin', async (req, res, next) => {
   next();
 });
 
+// NEW: Admin Overview Stats Route
+app.get('/api/admin/stats', async (req, res) => {
+  try {
+    // 1. Total Revenue (Successful payments only)
+    const revRes = await pool.query("SELECT SUM(amount_kes) as total FROM payments WHERE status = 'success'");
+    const totalRevenue = revRes.rows[0].total || 0;
+
+    // 2. Total Users
+    const userRes = await pool.query("SELECT COUNT(*) as count FROM users");
+    const totalUsers = parseInt(userRes.rows[0].count);
+
+    // 3. Total Listings
+    const listRes = await pool.query("SELECT COUNT(*) as count FROM listings");
+    const totalListings = parseInt(listRes.rows[0].count);
+
+    // 4. Pending Actions (Reports + Verifications)
+    const repRes = await pool.query("SELECT COUNT(*) as count FROM reports WHERE status = 'open'");
+    const verRes = await pool.query("SELECT COUNT(*) as count FROM sellers_verification WHERE status = 'pending'");
+    const pendingActions = parseInt(repRes.rows[0].count) + parseInt(verRes.rows[0].count);
+
+    // 5. Recent Transactions
+    const recentPayRes = await pool.query(`
+      SELECT p.amount_kes, p.purpose, p.mpesa_receipt, p.created_at, u.full_name
+      FROM payments p JOIN users u ON u.id = p.user_id
+      WHERE p.status = 'success'
+      ORDER BY p.created_at DESC LIMIT 5
+    `);
+
+    // 6. Recent Signups
+    const recentUserRes = await pool.query(`
+      SELECT full_name, phone, created_at
+      FROM users
+      ORDER BY created_at DESC LIMIT 5
+    `);
+
+    res.json({
+      totalRevenue,
+      totalUsers,
+      totalListings,
+      pendingActions,
+      recentTransactions: recentPayRes.rows,
+      recentSignups: recentUserRes.rows
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/admin/reports', async (req, res) => { try { res.json({ reports: await listReports(pool) }); } catch (err) { res.status(500).json({ error: err.message }); } });
 app.post('/api/admin/reports/:id/dismiss', async (req, res) => { try { await pool.query("UPDATE reports SET status = 'dismissed' WHERE id = $1", [req.params.id]); res.json({ ok: true }); } catch (err) { res.status(500).json({ error: err.message }); } });
 app.get('/api/admin/verifications', async (req, res) => { try { res.json({ verifications: await listVerifications(pool) }); } catch (err) { res.status(500).json({ error: err.message }); } });
@@ -361,7 +408,6 @@ app.post('/api/payments/initiate', async (req, res) => {
     });
 
     if (result.id) {
-      // GENERATE RECEIPT DATA
       const orderNumber = generateOrderNumber();
       const orderToken = crypto.randomBytes(16).toString('hex');
 
@@ -378,7 +424,6 @@ app.post('/api/payments/initiate', async (req, res) => {
   }
 });
 
-// Public receipt route
 app.get('/api/receipt/:orderNumber/:token', async (req, res) => {
   try {
     const { orderNumber, token } = req.params;
@@ -441,14 +486,11 @@ app.post('/api/payments/webhook', async (req, res) => {
     const metadata = attrs?.metadata || payload?.metadata || {};
     const listingId = metadata?.listing_id;
     const purpose = metadata?.purpose;
-    
-    // Extract the M-Pesa receipt number from KopoKopo's payload
     const mpesaReceipt = attrs?.transaction_reference || attrs?.receipt_number || null;
 
     const isSuccess = String(status).toLowerCase() === 'success' || String(status).toLowerCase() === 'complete';
 
     if (isSuccess) {
-      // 1. Update the payment record FIRST (so the receipt updates)
       await pool.query(
         `UPDATE payments 
          SET status = 'success', mpesa_receipt = $1, updated_at = now() 
@@ -457,7 +499,6 @@ app.post('/api/payments/webhook', async (req, res) => {
         [mpesaReceipt, purpose]
       );
 
-      // 2. Activate the listing/feature/badge
       if (purpose === 'standard_listing' && listingId) {
         await activateListing(pool, listingId, 12);
       } 

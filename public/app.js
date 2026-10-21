@@ -58,7 +58,6 @@ async function initNav() {
       adminLink?.classList.add('hidden');
     }
 
-    // ADD BELL ICON
     const nav = document.getElementById('nav');
     if (nav && !document.getElementById('nav-bell')) {
       const bell = document.createElement('a');
@@ -527,7 +526,6 @@ async function initDashboard() {
     document.getElementById('verify-banner').classList.remove('hidden');
   }
 
-  // Show notifications
   try {
     const res = await fetch('/api/notifications');
     const data = await res.json();
@@ -830,10 +828,12 @@ function initAdmin() {
 
     window.__adminUser = user;
 
+    // Load initial data
     loadReports();
     loadVerifications();
     loadAllListings();
     loadAllUsers();
+    loadStats(); // NEW
 
     // Add tabs for Admin Listings
     const adminListingsSection = document.getElementById('admin-listings');
@@ -865,7 +865,7 @@ function initAdmin() {
       tab.addEventListener('click', () => {
         document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
-        ['reports','verifications','listings','users'].forEach(k => {
+        ['overview','reports','verifications','listings','users'].forEach(k => {
           document.getElementById('admin-' + k).classList.toggle('hidden', k !== tab.dataset.tab);
         });
       });
@@ -884,6 +884,71 @@ function initAdmin() {
       usersTimer = setTimeout(() => loadAllUsers(searchUsers.value.trim()), 250);
     });
   }).catch(() => denied.classList.remove('hidden'));
+}
+
+// NEW: Function to load admin stats
+async function loadStats() {
+  try {
+    const res = await fetch('/api/admin/stats');
+    const data = await res.json();
+    
+    // Render Stats Cards
+    document.getElementById('admin-stats').innerHTML = `
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;">
+        <div class="stat-card" style="background: linear-gradient(135deg, #1a1a1a, #333); color: white; border: none; padding: 24px;">
+          <div style="font-size: 14px; color: #ccc; margin-bottom: 8px;">Total Revenue</div>
+          <div style="font-size: 32px; font-weight: 700; color: #ff6b00;">${formatKes(data.totalRevenue)}</div>
+        </div>
+        <div class="stat-card" style="background: white; border: 1px solid var(--gray-100); padding: 24px;">
+          <div style="font-size: 14px; color: var(--gray-500); margin-bottom: 8px;">Total Users</div>
+          <div style="font-size: 32px; font-weight: 700; color: var(--dark);">${data.totalUsers}</div>
+        </div>
+        <div class="stat-card" style="background: white; border: 1px solid var(--gray-100); padding: 24px;">
+          <div style="font-size: 14px; color: var(--gray-500); margin-bottom: 8px;">Total Listings</div>
+          <div style="font-size: 32px; font-weight: 700; color: var(--dark);">${data.totalListings}</div>
+        </div>
+        <div class="stat-card" style="background: #fff8f0; border: 1px solid #ffd9b3; padding: 24px;">
+          <div style="font-size: 14px; color: #a04d00; margin-bottom: 8px;">Pending Actions</div>
+          <div style="font-size: 32px; font-weight: 700; color: #ff6b00;">${data.pendingActions}</div>
+        </div>
+      </div>
+    `;
+
+    // Render Recent Lists
+    document.getElementById('admin-recent-lists').innerHTML = `
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+        <div class="admin-section">
+          <h2 style="font-size: 16px; border-bottom: 1px solid #eee; padding-bottom: 8px;">Recent Transactions</h2>
+          <div class="admin-list">
+            ${data.recentTransactions.length === 0 ? '<p class="loading">No transactions yet.</p>' : data.recentTransactions.map(t => `
+              <div class="admin-item">
+                <div>
+                  <strong>${escapeHtml(t.full_name)}</strong> — ${escapeHtml(t.purpose)}<br>
+                  <small style="color:#777">${t.mpesa_receipt || 'N/A'} · ${new Date(t.created_at).toLocaleString()}</small>
+                </div>
+                <div style="font-weight: bold; color: var(--green);">${formatKes(t.amount_kes)}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        <div class="admin-section">
+          <h2 style="font-size: 16px; border-bottom: 1px solid #eee; padding-bottom: 8px;">Recent Signups</h2>
+          <div class="admin-list">
+            ${data.recentSignups.length === 0 ? '<p class="loading">No signups yet.</p>' : data.recentSignups.map(u => `
+              <div class="admin-item">
+                <div>
+                  <strong>${escapeHtml(u.full_name)}</strong> — ${escapeHtml(u.phone)}<br>
+                  <small style="color:#777">${new Date(u.created_at).toLocaleString()}</small>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    console.error('Failed to load stats:', err);
+  }
 }
 
 async function loadReports() {
