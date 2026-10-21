@@ -523,7 +523,7 @@ textarea { resize: vertical; min-height: 80px; }
 
 .btn-primary {
   background: var(--orange);
-  color: var(--white);
+  color: var(--white) !important; /* Forces text to be white */
   border: none;
   padding: 13px 20px;
   border-radius: var(--radius-sm);

@@ -1,7 +1,5 @@
 // src/admin.js
 
-// ---------- REPORTS ----------
-
 export async function listReports(pool) {
   const result = await pool.query(`
     SELECT r.id, r.listing_id, r.reason, r.details, r.status, r.created_at,
@@ -14,8 +12,6 @@ export async function listReports(pool) {
   `);
   return result.rows;
 }
-
-// ---------- VERIFICATIONS ----------
 
 export async function listVerifications(pool) {
   const result = await pool.query(`
@@ -52,11 +48,10 @@ export async function rejectVerification(pool, verificationId, adminId, reason) 
   `, [reason || 'Rejected by admin', adminId, verificationId]);
 }
 
-// ---------- LISTINGS ----------
-
 export async function listAllListings(pool, limit = 100) {
+  // MODIFIED: Added l.is_featured to the SELECT
   const result = await pool.query(`
-    SELECT l.id, l.make, l.model, l.price_kes, l.status, l.is_paid, l.created_at,
+    SELECT l.id, l.make, l.model, l.price_kes, l.status, l.is_paid, l.is_featured, l.created_at,
            u.full_name AS seller_name, u.phone AS seller_phone
     FROM listings l
     JOIN users u ON u.id = l.user_id
@@ -68,8 +63,9 @@ export async function listAllListings(pool, limit = 100) {
 
 export async function searchListingsAdmin(pool, q) {
   const like = '%' + (q || '') + '%';
+  // MODIFIED: Added l.is_featured to the SELECT
   const result = await pool.query(`
-    SELECT l.id, l.make, l.model, l.price_kes, l.status, l.is_paid, l.created_at,
+    SELECT l.id, l.make, l.model, l.price_kes, l.status, l.is_paid, l.is_featured, l.created_at,
            u.full_name AS seller_name, u.phone AS seller_phone
     FROM listings l
     JOIN users u ON u.id = l.user_id
@@ -79,8 +75,6 @@ export async function searchListingsAdmin(pool, q) {
   `, [like]);
   return result.rows;
 }
-
-// ---------- USERS ----------
 
 export async function listAllUsers(pool, limit = 100) {
   const result = await pool.query(`
