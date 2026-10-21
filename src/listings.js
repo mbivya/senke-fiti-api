@@ -1,19 +1,20 @@
 // src/listings.js
 
-// Helper to generate the public URL for Supabase Storage
 const getPublicUrl = (key) => {
   if (!key) return null;
-  // If the key is already a full URL, just return it
   if (key.startsWith('http')) return key;
   return `${process.env.SUPABASE_URL}/storage/v1/object/public/senke-fiti/${key}`;
 };
 
 export async function searchListings(pool, params) {
+  // MODIFIED: Join users table to get seller_verified
   let query = `
     SELECT l.id, l.make, l.model, l.year, l.engine_cc, l.price_kes,
            l.condition, l.location_town, l.created_at, l.is_featured,
+           u.is_verified AS seller_verified,
            (SELECT r2_key FROM listing_images WHERE listing_id = l.id ORDER BY sort_order ASC LIMIT 1) AS cover_key
     FROM listings l
+    JOIN users u ON u.id = l.user_id
     WHERE l.status = 'active'
   `;
   const values = [];
@@ -60,11 +61,14 @@ export async function searchListings(pool, params) {
 }
 
 export async function getUserListings(pool, userId) {
+  // MODIFIED: Join users table to get seller_verified for dashboard
   const query = `
     SELECT l.id, l.make, l.model, l.year, l.price_kes, l.status, l.is_paid,
            l.is_featured, l.expires_at, l.created_at, l.location_town,
+           u.is_verified AS seller_verified,
            (SELECT r2_key FROM listing_images WHERE listing_id = l.id ORDER BY sort_order ASC LIMIT 1) AS cover_key
     FROM listings l
+    JOIN users u ON u.id = l.user_id
     WHERE l.user_id = $1 AND l.status != 'hidden'
     ORDER BY l.created_at DESC
   `;
@@ -102,7 +106,6 @@ export async function getListing(pool, listingId) {
     r2_key: getPublicUrl(img.r2_key)
   }));
 
-  // Apply the full URL conversion to documents as well
   const documents = docsRes.rows.map(doc => ({
     ...doc,
     r2_key: getPublicUrl(doc.r2_key)
@@ -111,7 +114,6 @@ export async function getListing(pool, listingId) {
   return { ...listing, images, documents };
 }
 
-// Used by Admin to bypass payment
 export async function activateListing(pool, listingId, months = 12) {
   const days = months * 30;
   await pool.query(

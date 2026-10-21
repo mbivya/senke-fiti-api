@@ -358,6 +358,8 @@ function renderListings(listings) {
       ? `<img src="${l.cover_key}" alt="${escapeHtml(l.make)} ${escapeHtml(l.model)}" loading="lazy">`
       : `<div class="placeholder">No photo</div>`;
     const featuredTag = l.is_featured ? '<span class="card-tag featured">★ Featured</span>' : '';
+    const verifiedTag = l.seller_verified ? '<span class="card-tag verified">Verified</span>' : '';
+
     return `
       <a class="card" href="/listing.html?id=${encodeURIComponent(l.id)}">
         <div class="card-img">${cover}</div>
@@ -368,6 +370,7 @@ function renderListings(listings) {
             <span class="card-tag">${escapeHtml(l.condition)}</span>
             ${l.engine_cc ? `<span class="card-tag">${l.engine_cc}cc</span>` : ''}
             ${featuredTag}
+            ${verifiedTag}
             <span>${escapeHtml(l.location_town)}</span>
           </div>
         </div>
@@ -631,6 +634,8 @@ async function loadDashboardListings() {
         `;
       }
 
+      const verifiedTag = l.seller_verified ? '<span class="card-tag verified">Verified</span>' : '';
+
       return `
         <div class="dash-card">
           <div class="dash-card-img">${cover}</div>
@@ -641,6 +646,7 @@ async function loadDashboardListings() {
               <span class="status-badge status-${l.status}">${l.status}</span>
               <span>${escapeHtml(l.location_town)}</span>
               ${l.is_featured ? '<span class="card-tag featured">★ Featured</span>' : ''}
+              ${verifiedTag}
             </div>
             <div class="dash-card-actions">${actions}</div>
           </div>
