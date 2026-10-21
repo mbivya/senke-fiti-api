@@ -10,7 +10,7 @@ import { createClient } from '@supabase/supabase-js';
 import { activateListing, searchListings, getUserListings, getListing } from './src/listings.js';
 import { hashPassword, verifyPassword, generateId, normalizePhone, getCookie, buildSessionCookie, buildLogoutCookie } from './src/auth.js';
 import { initiateStkPush, checkKopoKopoStatus } from './src/payments.js';
-import { expireStaleListings, deleteOldDrafts } from './src/cron.js'; // NEW
+import { expireStaleListings, deleteOldListings } from './src/cron.js';
 import { 
   listReports, listVerifications, approveVerification, rejectVerification, 
   listAllListings, listAllUsers, searchListingsAdmin, searchUsersAdmin, 
@@ -42,12 +42,12 @@ app.use(express.static(path.join(__dirname, 'public')));
 setInterval(async () => {
   try {
     const expired = await expireStaleListings(pool);
-    const deleted = await deleteOldDrafts(pool);
-    console.log(`Cron: Expired ${expired} listings. Deleted ${deleted} old drafts.`);
+    const deleted = await deleteOldListings(pool);
+    console.log(`Cron: Expired ${expired} listings. Deleted ${deleted.drafts} drafts and ${deleted.expired} expired listings.`);
   } catch (err) {
     console.error('Cron job failed:', err);
   }
-}, 24 * 60 * 60 * 1000); // 24 hours
+}, 24 * 60 * 60 * 1000);
 
 async function uploadToSupabase(filePath, fileBuffer, mimetype) {
   const { data, error } = await supabase.storage.from('senke-fiti').upload(filePath, fileBuffer, { contentType: mimetype });
@@ -98,7 +98,6 @@ app.post('/api/login', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// NEW: Forgot Password
 app.post('/api/forgot-password', async (req, res) => {
   const { phone } = req.body;
   const normalizedPhone = normalizePhone(phone);
@@ -109,14 +108,10 @@ app.post('/api/forgot-password', async (req, res) => {
     const user = result.rows[0];
     if (!user) return res.status(404).json({ error: 'No account found with that number.' });
 
-    // In a production app, we would send an SMS here with a temp PIN.
-    // Since we don't have SMS integration, we generate a new random password and hash it.
     const tempPin = Math.floor(100000 + Math.random() * 900000).toString();
     const newHash = await hashPassword(tempPin);
-    
     await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, user.id]);
 
-    // In a real app, you would hide this and send it via SMS. For now, we return it.
     res.json({ ok: true, message: `Password reset. Your temporary PIN is: ${tempPin}. Please log in and change it.` });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -387,7 +382,6 @@ app.post('/api/payments/webhook', async (req, res) => {
         await pool.query("UPDATE listings SET status = 'active', expires_at = now() + interval '12 months', updated_at = now() WHERE id = $1", [listingId]);
       }
       else if (purpose === 'verified_badge') {
-        // Update the most recent pending payment for this purpose
         const payRecord = await pool.query("SELECT user_id FROM payments WHERE purpose = 'verified_badge' AND status = 'pending' ORDER BY created_at DESC LIMIT 1");
         if (payRecord.rows.length > 0) {
            await pool.query("UPDATE users SET is_verified = true WHERE id = $1", [payRecord.rows[0].user_id]);

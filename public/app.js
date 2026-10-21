@@ -640,6 +640,7 @@ async function loadDashboardListings() {
             <div class="dash-card-meta">
               <span class="status-badge status-${l.status}">${l.status}</span>
               <span>${escapeHtml(l.location_town)}</span>
+              ${l.is_featured ? '<span class="card-tag featured">★ Featured</span>' : ''}
             </div>
             <div class="dash-card-actions">${actions}</div>
           </div>
@@ -927,7 +928,7 @@ async function loadAllListings(q = '') {
         <div class="admin-item">
           <div>
             <strong>${escapeHtml(l.make)} ${escapeHtml(l.model)}</strong> — ${formatKes(l.price_kes)}<br>
-            <small style="color:#777">${escapeHtml(l.seller_name)} · ${escapeHtml(l.seller_phone || '')} · <span class="status-badge status-${l.status}">${l.status}</span></small>
+            <small style="color:#777">${escapeHtml(l.seller_name)} · ${escapeHtml(l.seller_phone || '')} · <span class="status-badge status-${l.status}">${l.status}</span> · ${l.is_featured ? '★ Featured' : ''}</small>
           </div>
           <div class="admin-item-actions">
             ${approveBtn}

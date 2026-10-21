@@ -9,11 +9,17 @@ export async function expireStaleListings(pool) {
   return result.rowCount;
 }
 
-// Deletes draft listings older than 60 days
-export async function deleteOldDrafts(pool) {
-  const result = await pool.query(
+// Deletes old drafts (60 days) AND expired listings (30 days past expiry)
+export async function deleteOldListings(pool) {
+  const drafts = await pool.query(
     `DELETE FROM listings 
      WHERE status = 'draft' AND created_at < now() - interval '60 days'`
   );
-  return result.rowCount;
+  
+  const expired = await pool.query(
+    `DELETE FROM listings 
+     WHERE status = 'expired' AND expires_at < now() - interval '30 days'`
+  );
+  
+  return { drafts: drafts.rowCount, expired: expired.rowCount };
 }
